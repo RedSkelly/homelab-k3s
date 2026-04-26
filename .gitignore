@@ -1,0 +1,36 @@
+# Terraform
+*.tfstate
+*.tfstate.backup
+.terraform/
+.terraform.lock.hcl
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+terraform.tfvars
+
+# SOPS decrypted files
+*.dec
+
+# Ansible
+*.retry
+
+# Helm
+charts/
+
+# Editor
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets — never commit unencrypted
+*.key
+*.pem

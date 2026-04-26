@@ -1,0 +1,17 @@
+# SOPS configuration for encrypting secrets in Git.
+#
+# All files matching the creation_rules patterns below are encrypted with age.
+# Encrypted files can be committed safely; decrypted files (*.dec) are gitignored.
+#
+# Setup:
+#   1. Generate an age keypair:  age-keygen -o keys.txt
+#   2. Paste the public key into the 'age' field below
+#   3. Store keys.txt securely on management workstations (~/.config/sops/age/keys.txt)
+#   4. Encrypt:  sops --encrypt --in-place secrets.sops.yaml
+#   5. Decrypt:  sops --decrypt secrets.sops.yaml
+
+creation_rules:
+  # TODO: Replace with your age public key after running: age-keygen -o keys.txt
+  # The public key looks like: age1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+  - path_regex: \.sops\.(yaml|yml|json)$
+    age: ""  # <-- paste age public key here

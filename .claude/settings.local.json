@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(helmfile lint *)",
+      "Bash(helmfile version *)",
+      "Bash(helmfile template *)",
+      "Bash(helmfile --help)",
+      "Bash(helm env *)",
+      "Bash(helmfile diff *)",
+      "Bash(kubectl get pvc *)",
+      "Bash(kubectl get pods *)",
+      "Bash(kubectl get *)"
+    ]
+  }
+}

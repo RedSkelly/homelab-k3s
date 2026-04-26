@@ -1,0 +1,14 @@
+controller:
+  replicaCount: 2
+
+  nodeSelector:
+    node-role.kubernetes.io/worker: "true"
+
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: kubernetes.io/hostname
+      whenUnsatisfiable: ScheduleAnyway
+      labelSelector:
+        matchLabels:
+          app.kubernetes.io/name: ingress-nginx
+          app.kubernetes.io/component: controller

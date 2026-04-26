@@ -1,0 +1,139 @@
+# kube-prometheus-stack values
+# Helm release name: kps
+# Namespace: monitoring
+
+grafana:
+  replicas: 1
+  deploymentStrategy:
+    type: Recreate
+  persistence:
+    enabled: true
+    storageClassName: longhorn
+    size: 10Gi
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    annotations:
+      cert-manager.io/cluster-issuer: homelab-internal
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    hosts:
+      - grafana.homelab.local
+    tls:
+      - secretName: grafana-tls
+        hosts:
+          - grafana.homelab.local
+
+prometheus:
+  prometheusSpec:
+    retention: 7d
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: longhorn
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 30Gi
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    annotations:
+      cert-manager.io/cluster-issuer: homelab-internal
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    hosts:
+      - prometheus.homelab.local
+    tls:
+      - secretName: prometheus-tls
+        hosts:
+          - prometheus.homelab.local
+
+alertmanager:
+  enabled: true
+  config:
+    global:
+      resolve_timeout: 5m
+    route:
+      receiver: slack-notifications
+      group_by: ['alertname', 'namespace']
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 12h
+      routes:
+        - matchers:
+            - alertname="Watchdog"
+          receiver: "null"
+        - matchers:
+            - severity="critical"
+          receiver: slack-notifications
+    receivers:
+      - name: "null"
+      - name: slack-notifications
+        slack_configs:
+            # TODO: encrypt with SOPS+age before committing (step 2)
+            # Replace this placeholder with the actual webhook URL after encryption is wired
+          - api_url: "https://hooks.slack.com/services/PLACEHOLDER"
+            channel: "#alerts"
+            send_resolved: true
+            title: "{{ .CommonAnnotations.summary }}"
+            text: >-
+              {{ range .Alerts -}}
+              *Alert:* {{ .Annotations.summary }}
+              *Description:* {{ .Annotations.description }}
+              *Severity:* {{ .Labels.severity }}
+              *StartsAt:* {{ .StartsAt }}
+              {{ end }}
+  alertmanagerSpec:
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: longhorn
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 5Gi
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    annotations:
+      cert-manager.io/cluster-issuer: homelab-internal
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    hosts:
+      - alertmanager.homelab.local
+    tls:
+      - secretName: alertmanager-tls
+        hosts:
+          - alertmanager.homelab.local
+
+additionalPrometheusRulesMap:
+  longhorn-rules:
+    groups:
+      - name: longhorn.rules
+        rules:
+          - alert: LonghornVolumeReplicaDegraded
+            expr: |-
+              longhorn_volume_robustness != 2
+                and on(volume)
+                  longhorn_volume_replica_count < longhorn_volume_replica_desired_count
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Longhorn volume degraded"
+              description: "Longhorn volume {{ $labels.volume }} is degraded"
+
+          - alert: LonghornNodeDiskPressure
+            expr: longhorn_node_disk_usage_percentage > 85
+            for: 10m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Longhorn node disk pressure"
+              description: "Disk usage >85% on {{ $labels.node }}"
+
+          - alert: LonghornInstanceManagerDown
+            expr: up{job="longhorn-backend"} == 0
+            for: 5m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Longhorn instance manager down"

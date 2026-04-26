@@ -1,0 +1,14 @@
+# cert-manager values
+# Helm release name: cert-manager
+# Namespace: cert-manager
+
+crds:
+  enabled: true
+
+replicaCount: 1
+
+webhook:
+  replicaCount: 1
+
+cainjector:
+  replicaCount: 1

@@ -1,0 +1,31 @@
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: infra-critical
+value: 100000000
+globalDefault: false
+description: "Critical infrastructure (storage, control-plane networking)"
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: infra
+value: 50000000
+globalDefault: false
+description: "Cluster infrastructure services"
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: apps
+value: 1000000
+globalDefault: true
+description: "Default priority for application workloads"
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: batch-low
+value: 1000
+globalDefault: false
+description: "Low priority batch and experimental workloads"
