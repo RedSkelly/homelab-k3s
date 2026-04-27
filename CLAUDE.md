@@ -56,7 +56,7 @@ A production-patterned K3s homelab designed as a living portfolio. The value is 
 .
 ├── CLAUDE.md                          # This file — project context for Claude Code
 ├── README.md
-├── helmfile.yaml                      # DeclaratiHelm releases
+├── helmfile.yaml                      # Declarative Helm releases
 ├── ansible/
 │   ├── inventory/                     # Planned: host vars, group vars
 │   ├── playbooks/                     # Planned: node config playbooks
@@ -77,7 +77,7 @@ A production-patterned K3s homelab designed as a living portfolio. The value is 
 │   │   ├── kube-vip/                  # Planned: Helm migration from static pod
 │   │   ├── longhorn/
 │   │   │   ├── ingress.yaml           # longhorn.homelab.local, TLS via cert-manager
-│   │   │   ├── pdb.yaml              # PDBs: longhorn-manager, ui, driver-deployer
+│   │   │   ├── pdb.yaml               # PDBs: longhorn-manager, ui, driver-deployer
 │   │   │   ├── recurringjob-hourly.yaml  # Hourly snapshots, retain 24
 │   │   │   ├── servicemonitor.yaml    # Prometheus scraping via kps release label
 │   │   │   └── storageclass-test.yaml # 1-replica SC for dev/test
@@ -89,7 +89,7 @@ A production-patterned K3s homelab designed as a living portfolio. The value is 
 │   │   ├── kube-prometheus-stack/
 │   │   │   └── values.yaml            # Grafana/Prometheus/Alertmanager with ingresses,
 │   │   │                              # Longhorn alert rules. Slack webhook is
-│   │   │                               #www.placeholder.co] — requires SOPS+age.
+│   │   │                              # www.placeholder.com — requires SOPS+age.
 │   │   │                              # storageClassName: longhorn (prepped for PVC migration)
 │   │   └── loki/                      # Planned: centralized logging
 │   └── security/
