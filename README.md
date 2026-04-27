@@ -1,6 +1,6 @@
 # homelab-k3s
 
-Production-patterned Kubernetes platform built on bare metal, designed to be torn down and rebuilt entirely from code. The value here is the deployment pipeline and operational patterns — not the workloads.
+Production-patterned Kubernetes platform built on bare metal, designed to be torn down and rebuilt entirely from code. The value here is the deployment pipeline and operational patterns, not the workloads.
 
 ## Architecture
 
@@ -69,10 +69,10 @@ K3s v1.34 — embedded etcd HA
 └── helmfile.yaml         # Declarative Helm release management
 ```
 
-Resources like ingresses, PDBs, ServiceMonitors, and NetworkPolicies are co-located with their workload — not centralized.
+Resources like ingresses, PDBs, ServiceMonitors, and NetworkPolicies are co-located with their workload; not centralized.
 
 ## Principles
 
-- **GitOps-first** — The repo is the source of truth. Nodes are runtime targets, not places to edit files.
-- **Rebuild from scratch** — Every layer is designed to be reproducible from code. No snowflake state.
-- **Idempotent and modular** — Each component is independently deployable, testable, and replaceable.
+- **GitOps-first:** The repo is the source of truth. Nodes are runtime targets, not places to edit files.
+- **Rebuild from scratch:** Every layer is designed to be reproducible from code. No snowflake state.
+- **Idempotent and modular:** Each component is independently deployable, testable, and replaceable.
