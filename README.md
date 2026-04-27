@@ -12,15 +12,15 @@ Production-patterned Kubernetes platform built on bare metal, designed to be tor
                     │ SFP+ trunk (VLANs 10, 40, 99)
 ┌───────────────────┴───────────────────────────┐
 │  MikroTik CRS310 — core / distribution        │
-└────┬──────────────┬───────────────┬────────────┘
+└────┬──────────────┬───────────────┬───────────┘
      │              │               │
-┌────┴────┐   ┌─────┴─────┐   ┌────┴────┐
-│  pve1   │   │   pve2    │   │  pve3   │  Proxmox VE cluster
-│  CP+WK  │   │   CP+WK   │   │  CP+WK  │  3x i5-8500T / 32GB
-└────┬────┘   └─────┬─────┘   └────┬────┘  Mellanox 10GbE SFP+
+┌────┴────┐   ┌─────┴─────┐    ┌────┴────┐
+│  pve1   │   │   pve2    │    │  pve3   │  Proxmox VE cluster
+│  CP+WK  │   │   CP+WK   │    │  CP+WK  │  3x i5-8500T / 32GB
+└────┬────┘   └─────┬─────┘    └────┬────┘  Mellanox 10GbE SFP+
      │              │               │
 ┌────┴──────────────┴───────────────┴────┐
-│  MikroTik CRS305 — access             │
+│  MikroTik CRS305 — access              │
 │  VLAN 20: Longhorn storage replication │
 │  (isolated east-west, not routed)      │
 └────────────────────────────────────────┘
