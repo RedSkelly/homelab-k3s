@@ -91,7 +91,7 @@ A production-patterned K3s homelab designed as a living portfolio. The value is 
 │   │   │   │                          # Longhorn alert rules.
 │   │   │   │                          # storageClassName: longhorn (prepped for PVC migration)
 │   │   │   └── secrets.values.yaml    # SOPS-encrypted Helmfile values overlay
-│   │   │                              # (Slack webhook URL via global.slack_api_url)
+│   │   │                              # Slack webhook provided via SOPS-encrypted secrets overlay
 │   │   └── loki/                      # Planned: centralized logging
 │   └── security/
 │       ├── harbor/                    # Planned: container registry (deferred)
@@ -150,6 +150,7 @@ Deferred: CI pipeline, Harbor+Trivy, Vault+External Secrets, Hugo portfolio site
   - TODO: Set a longer duration (e.g., 8760h / 1 year) on the CA cert to reduce churn and risk.
 - **CLOSED** ~~kube-prometheus-stack has 29 Helm revisions (cleanup needed).~~
 - Longhorn/MetalLB/kube-vip not managed by Helm yet (future Helmfile migration).
+- Install helmfile-secrets to Windows as well, modify its plugin file to disable(?) deployment and work as CLI instead, like was done on Mac.
 
 ## Development Principles
 

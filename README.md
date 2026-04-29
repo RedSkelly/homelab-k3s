@@ -43,7 +43,7 @@ K3s v1.34 — embedded etcd HA
 | TLS | cert-manager | Running |
 | Monitoring | kube-prometheus-stack (Prometheus, Grafana, Alertmanager) | Running |
 | Chart management | Helmfile | Running |
-| Secrets | SOPS + age | Planned |
+| Secrets | SOPS + age | Running |
 | GitOps | Argo CD | Planned |
 | Policy enforcement | Kyverno | Planned |
 | Log aggregation | Loki | Planned |
