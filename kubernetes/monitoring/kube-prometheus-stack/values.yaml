@@ -69,9 +69,7 @@ alertmanager:
       - name: "null"
       - name: slack-notifications
         slack_configs:
-            # TODO: encrypt with SOPS+age before committing (step 2)
-            # Replace this placeholder with the actual webhook URL after encryption is wired
-          - api_url: "https://hooks.slack.com/services/PLACEHOLDER"
+          - # api_url: provided by secrets overlay (secrets.values.yaml) via global.slack_api_url
             channel: "#alerts"
             send_resolved: true
             title: "{{ .CommonAnnotations.summary }}"

@@ -58,3 +58,5 @@ releases:
     version: 81.0.0
     values:
       - kubernetes/monitoring/kube-prometheus-stack/values.yaml
+    secrets:
+      - kubernetes/monitoring/kube-prometheus-stack/secrets.values.yaml

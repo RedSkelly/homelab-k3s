@@ -87,10 +87,11 @@ A production-patterned K3s homelab designed as a living portfolio. The value is 
 │   │       └── priorityclasses.yaml   # infra-critical, infra, apps (default), batch-low
 │   ├── monitoring/
 │   │   ├── kube-prometheus-stack/
-│   │   │   └── values.yaml            # Grafana/Prometheus/Alertmanager with ingresses,
-│   │   │                              # Longhorn alert rules. Slack webhook is
-│   │   │                              # www.placeholder.com — requires SOPS+age.
-│   │   │                              # storageClassName: longhorn (prepped for PVC migration)
+│   │   │   ├── values.yaml            # Grafana/Prometheus/Alertmanager with ingresses,
+│   │   │   │                          # Longhorn alert rules.
+│   │   │   │                          # storageClassName: longhorn (prepped for PVC migration)
+│   │   │   └── secrets.values.yaml    # SOPS-encrypted Helmfile values overlay
+│   │   │                              # (Slack webhook URL via global.slack_api_url)
 │   │   └── loki/                      # Planned: centralized logging
 │   └── security/
 │       ├── harbor/                    # Planned: container registry (deferred)
@@ -116,7 +117,7 @@ Workload resources (ingress, PDBs, ServiceMonitors, NetworkPolicies) co-locate w
 | Layer              | Tool                          | Purpose                          | Status         |
 |--------------------|-------------------------------|----------------------------------|----------------|
 | Chart management   | Helmfile                      | Declarative Helm releases        | Complete       |
-| Secrets encryption | SOPS + age                    | Encrypt secrets in Git           | **Next up**    |
+| Secrets encryption | SOPS + age                    | Encrypt secrets in Git           | Complete       |
 | GitOps reconciler  | Argo CD                       | Continuous delivery from Git     | Planned        |
 | Node configuration | Ansible                       | OS-level config, packages        | Planned        |
 | VM provisioning    | Terraform (bpg/proxmox)       | Proxmox VM lifecycle             | Planned        |
@@ -130,7 +131,7 @@ Workload resources (ingress, PDBs, ServiceMonitors, NetworkPolicies) co-locate w
 Ordered by dependency chain — each step enables the next:
 
 1. ~~**Helmfile:** Declare cert-manager, ingress-nginx, kps as Helmfile releases. Clean up kps 29 revisions. Migrate kps PVCs from `longhorn-storage-heavy` → `longhorn` SC. MetalLB/Longhorn/kube-vip Helm migration deferred.~~
-2. **SOPS + age:** Wire `.sops.yaml`, generate age key, encrypt Slack webhook and any other secrets. Must complete before Argo CD.
+2. ~~**SOPS + age:** Wire `.sops.yaml`, generate age key, encrypt Slack webhook and any other secrets. Must complete before Argo CD.~~
 3. **Argo CD:** Start with one low-risk Application, expand to full stack.
 4. **Kyverno:** First workload deployed via Argo CD. Policies for resource limits + default NetworkPolicies.
 5. **Loki:** Centralized logging, deployed via Argo CD.
