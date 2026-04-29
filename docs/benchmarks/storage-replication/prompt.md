@@ -1,6 +1,6 @@
 # Claude Code Prompt — Test East-West Storage Replication Speed
 
-🎯 **Target:** Claude Code | 💡 Optimized for agentic SSH-based benchmarking across a known cluster topology with explicit stop conditions and non-destructive constraints.
+**Target:** Claude Code | Optimized for agentic SSH-based benchmarking across a known cluster topology with explicit stop conditions and non-destructive constraints.
 
 ---
 
@@ -29,7 +29,7 @@ Benchmark both the raw VLAN 20 network speed between worker nodes (iperf3) and t
    - Verify Longhorn is healthy: `kubectl -n longhorn-system get pods` — all pods Running.
    - Check current Longhorn default replica count (`kubectl get storageclass longhorn -o yaml`).
    - Report node names, Longhorn health, and replica count before proceeding.
-   - ✅ Checkpoint: Output pre-flight summary.
+   - Checkpoint: Output pre-flight summary.
 
 2. **Benchmark raw VLAN 20 network speed (iperf3):**
    - SSH to the worker nodes and identify the VLAN 20 interface and its IP on each worker. Longhorn's storage network setting or the node's interface list (`ip -br addr`) will show which interface carries VLAN 20 traffic. Report the interface name and IP for each worker.
@@ -37,20 +37,20 @@ Benchmark both the raw VLAN 20 network speed between worker nodes (iperf3) and t
    - Test all 3 pairs: wk-01↔wk-02, wk-01↔wk-03, wk-02↔wk-03.
    - For each pair run: `iperf3 -c <VLAN20_IP> -t 10 -P 4 --json` (10 seconds, 4 parallel streams).
    - Parse JSON output. Extract: total bandwidth (Gbps), retransmits.
-   - ✅ Checkpoint: Output a table of network bandwidth per worker pair. Flag if any pair is significantly below 9 Gbps (expected for 10GbE with overhead).
+   - Checkpoint: Output a table of network bandwidth per worker pair. Flag if any pair is significantly below 9 Gbps (expected for 10GbE with overhead).
 
 3. **Create a test namespace and PVC:**
    - Create namespace `storage-bench` (or reuse if it exists).
    - Create a 2Gi PVC using the `longhorn` StorageClass.
    - Wait for the PVC to be Bound (timeout: 120s).
-   - ✅ Checkpoint: Confirm PVC is Bound and report which node the volume is attached to.
+   - Checkpoint: Confirm PVC is Bound and report which node the volume is attached to.
 
 4. **Deploy a benchmark pod:**
    - Deploy a pod (use `ubuntu:24.04` or `alpine` image) that mounts the PVC at `/data`.
    - Install `fio` inside the pod (apt-get or apk).
    - The pod MUST run on a **worker node** (use nodeSelector `node-role.kubernetes.io/worker` or match worker hostnames).
    - Wait for the pod to be Running (timeout: 120s).
-   - ✅ Checkpoint: Confirm pod is Running and which worker node it landed on.
+   - Checkpoint: Confirm pod is Running and which worker node it landed on.
 
 5. **Run fio benchmarks (sequential and random):**
    - **Sequential write:** `fio --name=seq-write --ioengine=libaio --direct=1 --bs=1M --size=1G --numjobs=1 --rw=write --group_reporting --output-format=json --filename=/data/seq-test.dat`
@@ -58,12 +58,12 @@ Benchmark both the raw VLAN 20 network speed between worker nodes (iperf3) and t
    - **Random write (4K):** `fio --name=rand-write --ioengine=libaio --direct=1 --bs=4k --size=256M --numjobs=4 --iodepth=32 --rw=randwrite --group_reporting --output-format=json --filename=/data/rand-test.dat`
    - **Random read (4K):** `fio --name=rand-read --ioengine=libaio --direct=1 --bs=4k --size=256M --numjobs=4 --iodepth=32 --rw=randread --group_reporting --output-format=json --filename=/data/rand-test.dat`
    - Parse JSON output from each run. Extract: bandwidth (MB/s), IOPS, average latency (usec), p99 latency.
-   - ✅ Checkpoint: Output a formatted results table after all 4 tests complete.
+   - Checkpoint: Output a formatted results table after all 4 tests complete.
 
 6. **Check replica placement:**
    - Use `kubectl -n longhorn-system get replicas.longhorn.io` (or the Longhorn API) to identify which nodes hold replicas of the test volume.
    - Report replica placement — this confirms replication actually crossed VLAN 20.
-   - ✅ Checkpoint: Output replica node list.
+   - Checkpoint: Output replica node list.
 
 7. **Produce summary:**
    - Print two tables: (1) iperf3 network bandwidth per worker pair, and (2) fio storage benchmarks (bandwidth, IOPS, avg latency, p99 latency).
@@ -76,7 +76,7 @@ Benchmark both the raw VLAN 20 network speed between worker nodes (iperf3) and t
    - Delete the PVC.
    - Delete the `storage-bench` namespace.
    - Remove iperf3 from all worker nodes if it was installed: `sudo apt-get remove -y iperf3 && sudo apt-get autoremove -y`.
-   - ✅ Checkpoint: Confirm all test resources and packages are removed.
+   - Checkpoint: Confirm all test resources and packages are removed.
 
 ## Allowed Actions
 
