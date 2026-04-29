@@ -39,12 +39,8 @@ repositories:
 
 releases:
   # --- core ---
-  - name: cert-manager
-    namespace: cert-manager
-    chart: jetstack/cert-manager
-    version: v1.19.2
-    values:
-      - kubernetes/core/cert-manager/values.yaml
+  # cert-manager: migrated to Argo CD management (2026-04-29).
+  # Application manifest: kubernetes/bootstrap/argocd/applications/cert-manager.yaml
 
   - name: ingress-nginx
     namespace: ingress-nginx

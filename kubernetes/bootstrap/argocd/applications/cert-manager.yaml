@@ -1,0 +1,47 @@
+# Argo CD Application -- cert-manager
+#
+# Migrated from Helmfile to Argo CD management.
+# This Application points directly at the upstream jetstack Helm chart
+# at the exact version that was previously deployed via Helmfile.
+#
+# syncPolicy is manual (no automated sync/prune/selfHeal) so that all
+# changes require explicit human-triggered sync from the Argo CD UI or CLI.
+#
+# ServerSideApply is enabled because cert-manager installs large CRDs
+# that exceed the client-side annotation size limit.
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cert-manager
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  source:
+    repoURL: https://charts.jetstack.io
+    chart: cert-manager
+    targetRevision: v1.19.2
+    helm:
+      # Matches the values currently deployed by Helmfile.
+      # replicaCount/webhook/cainjector counts are chart defaults,
+      # included explicitly so the Application is self-documenting.
+      valuesObject:
+        crds:
+          enabled: true
+        replicaCount: 1
+        webhook:
+          replicaCount: 1
+        cainjector:
+          replicaCount: 1
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cert-manager
+
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

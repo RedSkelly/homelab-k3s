@@ -46,7 +46,7 @@ A production-patterned K3s homelab designed as a living portfolio. The value is 
 | kube-vip              | v0.8.2   | static pod       | Floating VIP for API server HA           |
 | MetalLB               | v0.14.5  | kubectl manifest | LoadBalancer IP allocation               |
 | Longhorn              | v1.6.2   | kubectl manifest | **Sole default StorageClass**            |
-| cert-manager          | v1.19.2  | Helm (1 rev)     | Certs expire June 2026                   |
+| cert-manager          | v1.19.2  | Argo CD          | First Helmfile-to-ArgoCD migration       |
 | ingress-nginx         | v4.14.1  | Helm (3 rev)     | Values file in repo                      |
 | kube-prometheus-stack | v81.0.0  | Helm (29 rev)    | Values file in repo; ~~needs revision cleanup~~ |
 | Argo CD               | v3.3.8   | Helm (1 rev)     | Non-HA; SOPS+age on repo-server          |
@@ -69,10 +69,13 @@ A production-patterned K3s homelab designed as a living portfolio. The value is 
 │   │   └── hugo-portfolio/            # Planned: capstone workload
 │   ├── bootstrap/
 │   │   └── argocd/
+│   │       ├── applications/
+│   │       │   └── cert-manager.yaml  # First Argo CD Application (migrated from Helmfile)
 │   │       └── values.yaml            # Non-HA, insecure mode, helm-secrets/SOPS/age on repo-server
 │   ├── ci/                            # Planned: CI pipeline config
 │   ├── core/
-│   │   ├── cert-manager/              # No values file yet — Helmfile will create one
+│   │   ├── cert-manager/
+│   │   │   └── values.yaml            # Argo CD-managed; referenced by Application valuesObject
 │   │   ├── external-secrets/          # Planned: Vault+ESO (deferred)
 │   │   ├── ingress-nginx/
 │   │   │   └── values.yaml            # 2 replicas, worker nodeSelector, topology spread
@@ -126,7 +129,7 @@ Workload resources (ingress, PDBs, ServiceMonitors, NetworkPolicies) co-locate w
 | Dependancy updates | Renovate                      | Automate PR-based updates        | Planned        |
 | Git hygiene        | Pre-commit                    | Linting, validation on commit    | Planned        |
 
-**Current state:** No Terraform, Ansible, ~~or Helmfile~~ exists yet. Provisioning was done manually via SSH/shell scripts. Longhorn and MetalLB installed via kubectl manifest. Helm manages cert-manager, ingress-nginx, and kube-prometheus-stack. Values files migrated to repo (2026-04-25). Working files deleted from k3s-cp-01.
+**Current state:** No Terraform, Ansible, ~~or Helmfile~~ exists yet. Provisioning was done manually via SSH/shell scripts. Longhorn and MetalLB installed via kubectl manifest. Helmfile manages ingress-nginx, kps, and argocd. cert-manager migrated to Argo CD management (2026-04-29). Values files migrated to repo (2026-04-25). Working files deleted from k3s-cp-01.
 
 ## Implementation Roadmap
 
@@ -134,7 +137,7 @@ Ordered by dependency chain — each step enables the next:
 
 1. ~~**Helmfile:** Declare cert-manager, ingress-nginx, kps as Helmfile releases. Clean up kps 29 revisions. Migrate kps PVCs from `longhorn-storage-heavy` → `longhorn` SC. MetalLB/Longhorn/kube-vip Helm migration deferred.~~
 2. ~~**SOPS + age:** Wire `.sops.yaml`, generate age key, encrypt Slack webhook and any other secrets. Must complete before Argo CD.~~
-3. **Argo CD:** ~~Install Argo CD via Helmfile with SOPS+age integration.~~ Deployed (non-HA, Helm chart 9.5.9, app v3.3.8). Next: create Application manifests, start with one low-risk release, expand to full stack.
+3. **Argo CD:** ~~Install Argo CD via Helmfile with SOPS+age integration.~~ Deployed (non-HA, Helm chart 9.5.9, app v3.3.8). ~~First migration: cert-manager moved from Helmfile to Argo CD (2026-04-29).~~ Next: migrate remaining Helmfile releases (ingress-nginx, kps), expand to full stack. Migration pattern: create Application with exact chart+values, sync with ServerSideApply, remove from helmfile.yaml, delete Helm release secret.
 4. **Kyverno:** First workload deployed via Argo CD. Policies for resource limits + default NetworkPolicies.
 5. **Loki:** Centralized logging, deployed via Argo CD.
 6. **Ansible:** Codify node config (swap, kernel, k3s config, sudoers, SSH keys) as idempotent playbooks. Parallel track.
