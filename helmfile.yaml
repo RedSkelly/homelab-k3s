@@ -34,6 +34,8 @@ repositories:
     url: https://kubernetes.github.io/ingress-nginx
   - name: prometheus-community
     url: https://prometheus-community.github.io/helm-charts
+  - name: argo
+    url: https://argoproj.github.io/argo-helm
 
 releases:
   # --- core ---
@@ -60,3 +62,11 @@ releases:
       - kubernetes/monitoring/kube-prometheus-stack/values.yaml
     secrets:
       - kubernetes/monitoring/kube-prometheus-stack/secrets.values.yaml
+
+  # --- bootstrap ---
+  - name: argocd
+    namespace: argocd
+    chart: argo/argo-cd
+    version: 9.5.9
+    values:
+      - kubernetes/bootstrap/argocd/values.yaml

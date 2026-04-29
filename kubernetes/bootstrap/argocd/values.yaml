@@ -1,0 +1,192 @@
+# Argo CD Values -- homelab-k3s
+# Non-HA deployment with helm-secrets/SOPS/age integration on the repo-server.
+# TLS terminates at ingress-nginx; Argo CD server runs in insecure (HTTP) mode.
+
+global:
+  # Sets the hostname for ingress and internal references across all components
+  domain: argocd.homelab.local
+
+configs:
+  params:
+    # TLS terminates at ingress-nginx, so the server itself serves plain HTTP.
+    # Without this, the server forces HTTPS redirects that conflict with the ingress.
+    server.insecure: true
+
+  cm:
+    # Allow helm-secrets URI schemes so Argo CD Applications can reference
+    # SOPS-encrypted values files (e.g., secrets+age-import://...)
+    helm.valuesFileSchemes: >-
+      secrets+gpg-import, secrets+gpg-import-kubernetes,
+      secrets+age-import, secrets+age-import-kubernetes,
+      secrets, secrets+literal, https
+
+# --- Server ---
+server:
+  # All Argo CD components scheduled on workers to keep CP nodes clean
+  nodeSelector:
+    node-role.kubernetes.io/worker: "true"
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      memory: 256Mi
+
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    annotations:
+      # Matches existing ingress pattern (Grafana, Prometheus, Longhorn)
+      cert-manager.io/cluster-issuer: homelab-internal
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    tls: true
+
+# --- Application Controller ---
+controller:
+  nodeSelector:
+    node-role.kubernetes.io/worker: "true"
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
+
+# --- Repo Server ---
+# Configured with helm-secrets, SOPS, and age for decrypting encrypted values files.
+# Uses the initContainer approach from:
+#   https://github.com/jkroepke/helm-secrets/wiki/ArgoCD-Integration
+# This avoids building a custom Docker image.
+repoServer:
+  nodeSelector:
+    node-role.kubernetes.io/worker: "true"
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      memory: 512Mi
+
+  env:
+    - name: HELM_PLUGINS
+      value: /gitops-tools/helm-plugins/
+    - name: HELM_SECRETS_SOPS_PATH
+      value: /gitops-tools/sops
+    - name: HELM_SECRETS_VALS_PATH
+      value: /gitops-tools/vals
+    - name: HELM_SECRETS_AGE_PATH
+      value: /gitops-tools/age
+    - name: HELM_SECRETS_KUBECTL_PATH
+      value: /gitops-tools/kubectl
+    - name: HELM_SECRETS_CURL_PATH
+      value: /gitops-tools/curl
+    - name: HELM_SECRETS_BACKEND
+      value: sops
+    - name: HELM_SECRETS_VALUES_ALLOW_SYMLINKS
+      value: "false"
+    - name: HELM_SECRETS_VALUES_ALLOW_ABSOLUTE_PATH
+      value: "true"
+    - name: HELM_SECRETS_VALUES_ALLOW_PATH_TRAVERSAL
+      value: "false"
+    - name: HELM_SECRETS_WRAPPER_ENABLED
+      value: "true"
+    - name: HELM_SECRETS_DECRYPT_SECRETS_IN_TMP_DIR
+      value: "true"
+    - name: HELM_SECRETS_HELM_PATH
+      value: /usr/local/bin/helm
+    # Points to the age key mounted from the sops-age Kubernetes secret
+    - name: SOPS_AGE_KEY_FILE
+      value: /helm-secrets-private-keys/keys.txt
+
+  volumes:
+    - name: gitops-tools
+      emptyDir: {}
+    - name: helm-secrets-private-keys
+      secret:
+        secretName: sops-age
+
+  volumeMounts:
+    - mountPath: /gitops-tools
+      name: gitops-tools
+    # The helm-secrets wrapper intercepts helm calls to transparently decrypt secrets
+    - mountPath: /usr/local/sbin/helm
+      subPath: helm
+      name: gitops-tools
+    - mountPath: /helm-secrets-private-keys/
+      name: helm-secrets-private-keys
+
+  initContainers:
+    - name: download-tools
+      image: alpine:latest
+      imagePullPolicy: IfNotPresent
+      command: [sh, -euc]
+      env:
+        - name: HELM_SECRETS_VERSION
+          value: "4.7.6"
+        - name: KUBECTL_VERSION
+          value: "1.34.3"
+        - name: VALS_VERSION
+          value: "0.43.9"
+        - name: SOPS_VERSION
+          value: "3.12.2"
+        - name: AGE_VERSION
+          value: "1.3.1"
+        - name: HELM_PLUGINS
+          value: /gitops-tools/helm-plugins/
+        - name: HELM_SECRETS_CURL_PATH
+          value: /gitops-tools/curl
+        - name: HELM_SECRETS_SOPS_PATH
+          value: /gitops-tools/sops
+        - name: HELM_SECRETS_VALS_PATH
+          value: /gitops-tools/vals
+        - name: HELM_SECRETS_AGE_PATH
+          value: /gitops-tools/age
+        - name: HELM_SECRETS_KUBECTL_PATH
+          value: /gitops-tools/kubectl
+      args:
+        - |
+          mkdir -p "${HELM_PLUGINS}"
+          export CURL_ARCH=$(uname -m | sed -e 's/x86_64/amd64/')
+          wget -qO "${HELM_SECRETS_CURL_PATH}" "https://github.com/moparisthebest/static-curl/releases/latest/download/curl-${CURL_ARCH}"
+          export GO_ARCH=$(uname -m | sed -e 's/x86_64/amd64/' -e 's/\(arm\)\(64\)\?.*/\1\2/' -e 's/aarch64$/arm64/')
+          wget -qO "${HELM_SECRETS_KUBECTL_PATH}" "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/${GO_ARCH}/kubectl"
+          wget -qO "${HELM_SECRETS_SOPS_PATH}" "https://github.com/getsops/sops/releases/download/v${SOPS_VERSION}/sops-v${SOPS_VERSION}.linux.${GO_ARCH}"
+          wget -qO- "https://github.com/helmfile/vals/releases/download/v${VALS_VERSION}/vals_${VALS_VERSION}_linux_${GO_ARCH}.tar.gz" | tar zxv -C "${HELM_SECRETS_VALS_PATH%/*}" vals
+          wget -qO- "https://github.com/jkroepke/helm-secrets/releases/download/v${HELM_SECRETS_VERSION}/helm-secrets.tar.gz" | tar -C "${HELM_PLUGINS}" -xzf-
+          wget -qO- "https://github.com/FiloSottile/age/releases/download/v${AGE_VERSION}/age-v${AGE_VERSION}-linux-${GO_ARCH}.tar.gz" | tar -xzf- --strip-components=1 -C "${HELM_SECRETS_AGE_PATH%/*}" age/age
+          chmod +x \
+            "${HELM_SECRETS_CURL_PATH}" \
+            "${HELM_SECRETS_SOPS_PATH}" \
+            "${HELM_SECRETS_KUBECTL_PATH}" \
+            "${HELM_SECRETS_VALS_PATH}" \
+            "${HELM_SECRETS_AGE_PATH}"
+          cp "${HELM_PLUGINS}/helm-secrets/scripts/wrapper/helm.sh" /gitops-tools/helm
+      volumeMounts:
+        - mountPath: /gitops-tools
+          name: gitops-tools
+
+# --- Redis ---
+redis:
+  nodeSelector:
+    node-role.kubernetes.io/worker: "true"
+
+  resources:
+    requests:
+      cpu: 25m
+      memory: 64Mi
+    limits:
+      memory: 128Mi
+
+# --- Dex (OIDC provider) ---
+# Disabled: using built-in local admin auth for now.
+# Enable when adding SSO (e.g., OIDC via Authentik or Keycloak).
+dex:
+  enabled: false
+
+# --- Notifications ---
+# Disabled: not needed yet. Enable when wiring Slack/webhook notifications.
+notifications:
+  enabled: false

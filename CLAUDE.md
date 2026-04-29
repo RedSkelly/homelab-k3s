@@ -49,6 +49,7 @@ A production-patterned K3s homelab designed as a living portfolio. The value is 
 | cert-manager          | v1.19.2  | Helm (1 rev)     | Certs expire June 2026                   |
 | ingress-nginx         | v4.14.1  | Helm (3 rev)     | Values file in repo                      |
 | kube-prometheus-stack | v81.0.0  | Helm (29 rev)    | Values file in repo; ~~needs revision cleanup~~ |
+| Argo CD               | v3.3.8   | Helm (1 rev)     | Non-HA; SOPS+age on repo-server          |
 
 ## Repo Structure
 
@@ -67,7 +68,8 @@ A production-patterned K3s homelab designed as a living portfolio. The value is 
 │   ├── apps/
 │   │   └── hugo-portfolio/            # Planned: capstone workload
 │   ├── bootstrap/
-│   │   └── argocd/                    # Planned: Argo CD Application manifests
+│   │   └── argocd/
+│   │       └── values.yaml            # Non-HA, insecure mode, helm-secrets/SOPS/age on repo-server
 │   ├── ci/                            # Planned: CI pipeline config
 │   ├── core/
 │   │   ├── cert-manager/              # No values file yet — Helmfile will create one
@@ -118,7 +120,7 @@ Workload resources (ingress, PDBs, ServiceMonitors, NetworkPolicies) co-locate w
 |--------------------|-------------------------------|----------------------------------|----------------|
 | Chart management   | Helmfile                      | Declarative Helm releases        | Complete       |
 | Secrets encryption | SOPS + age                    | Encrypt secrets in Git           | Complete       |
-| GitOps reconciler  | Argo CD                       | Continuous delivery from Git     | Planned        |
+| GitOps reconciler  | Argo CD                       | Continuous delivery from Git     | Running        |
 | Node configuration | Ansible                       | OS-level config, packages        | Planned        |
 | VM provisioning    | Terraform (bpg/proxmox)       | Proxmox VM lifecycle             | Planned        |
 | Dependancy updates | Renovate                      | Automate PR-based updates        | Planned        |
@@ -132,7 +134,7 @@ Ordered by dependency chain — each step enables the next:
 
 1. ~~**Helmfile:** Declare cert-manager, ingress-nginx, kps as Helmfile releases. Clean up kps 29 revisions. Migrate kps PVCs from `longhorn-storage-heavy` → `longhorn` SC. MetalLB/Longhorn/kube-vip Helm migration deferred.~~
 2. ~~**SOPS + age:** Wire `.sops.yaml`, generate age key, encrypt Slack webhook and any other secrets. Must complete before Argo CD.~~
-3. **Argo CD:** Start with one low-risk Application, expand to full stack.
+3. **Argo CD:** ~~Install Argo CD via Helmfile with SOPS+age integration.~~ Deployed (non-HA, Helm chart 9.5.9, app v3.3.8). Next: create Application manifests, start with one low-risk release, expand to full stack.
 4. **Kyverno:** First workload deployed via Argo CD. Policies for resource limits + default NetworkPolicies.
 5. **Loki:** Centralized logging, deployed via Argo CD.
 6. **Ansible:** Codify node config (swap, kernel, k3s config, sudoers, SSH keys) as idempotent playbooks. Parallel track.
