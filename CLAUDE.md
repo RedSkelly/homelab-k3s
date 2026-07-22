@@ -10,12 +10,13 @@ A production-patterned K3s homelab designed as a living portfolio. The value is 
 
 ### Hardware
 - 4x Lenovo M920Q nodes total:
-  - 3x running Proxmox VE (cluster: `homelab-pve`); each has Intel i5-8500T, Mellanox dual 10GbE SFP+ NIC, 32GB RAM, 256GB NVMe SSD, 1TB SATA SSD
+  - 3x running Proxmox VE (cluster: `homelab-pve`); each has Intel i5-8500T (**6 cores / 6 threads, no HT** — the physical CPU budget per host), Mellanox dual 10GbE SFP+ NIC, 32GB RAM, 256GB NVMe SSD, 1TB SATA SSD
   - 1x running OPNsense bare metal as upstream firewall/router; same hardware spec
 - VMs provisioned on Proxmox; cloud-init is disabled on all VMs
   - pve1: 1 control plane, 1 worker
   - pve2: 1 control plane, 1 worker
   - pve3: 1 control plane, 1 worker
+  - pve3 additionally hosts the Tailscale subnet router LXC (CTID 200, 1 vCPU / 512 MB, near-idle) — see Networking
 
 ### K3s Cluster
 - **Version:** k3s v1.34.3+k3s1, embedded etcd HA
@@ -23,7 +24,8 @@ A production-patterned K3s homelab designed as a living portfolio. The value is 
 - **Control plane (3 nodes):**
   - k3s-cp-01 / 02 / 03 on VLAN 10 (4 vCPU / 10GB RAM / 64GB disk, from NVMe SSD)
 - **Workers (3 nodes):**
-  - k3s-wk-01 / 02 / 03 on VLAN 10 (2 vCPU / 12GB RAM / 64GB disk, from NVMe SSD)
+  - k3s-wk-01 / 02 / 03 on VLAN 10 (3 vCPU / 12GB RAM / 64GB disk, from NVMe SSD)
+  - 3 vCPU chosen empirically: Longhorn's single-threaded per-volume engine starves at 2 (~226 MB/s), clears at 3 (~325 MB/s, engine runqueue wait 44.5% → 0%), and gains only +14% at 4 while adding host steal on the co-located etcd CP. Sized uniformly across all workers because engine placement follows the attaching pod — any worker can become the engine node.
 - **kube-vip:** Floating VIP on VLAN 10, one pod per CP node
 - **SSH user:** `k3s` (passwordless sudo on all nodes)
 - **Swap:** Disabled on all 6 nodes (etcd latency on CP; consistency on workers)
@@ -33,10 +35,16 @@ A production-patterned K3s homelab designed as a living portfolio. The value is 
 - **Switches:** MikroTik CRS310 (core/distribution), CRS305 (access)
 - **VLANs:**
   - VLAN 10 — PROXMOX (cluster infrastructure)
-  - VLAN 20 — Storage replication (CRS305-only, east-west traffic, not routed through OPNsense)
+  - VLAN 20 — Provisioned for storage replication (CRS305-only, east-west, not routed through OPNsense). **Longhorn does NOT use it.** `storage-network` is unset, so replication rides VLAN 10 (`enp6s18`) via the flannel VXLAN overlay. Verified 2026-07-14 by interface counters: a 1 GiB write put 659 MB on VLAN 10 and **0 bytes** on VLAN 20. The segment is up and fast (~9.58 Gbps), just unused. See `docs/benchmarks/storage-replication/2026-07-14-results.md`.
   - VLAN 40 — CLIENT_LAN (user devices, wireless AP)
   - VLAN 99 — MGMT (out-of-band management, JetKVM)
+- **MTU:** 9000 (jumbo frames) on the VLAN 10 and VLAN 20 node interfaces (`enp6s18`, `enp6s19`); `flannel.1` runs at 8950 (9000 − 50-byte VXLAN overhead). Raised from 1500 between the 2026-04-29 and 2026-07-14 benchmark runs. The July run measured ~2x fewer TCP retransmits and 16-25% higher sequential throughput, but that comparison is uncontrolled (single runs, 3 months apart) — treat jumbo frames as *plausibly* responsible, not proven. Retransmits still sit at ~2.3%, so MTU was not the sole cause.
+  - **Applied by hand at two layers, both above the guest:** the CRS305 (switch ports + bridge), and the **Proxmox hosts' `/etc/network/interfaces`** — Proxmox is Debian/ifupdown, so the `vmbr` bridge MTU is set there, not in netplan. (Host-side config is operator-reported; it is not verifiable from the k3s guests, which only have SSH to the VMs.)
+  - **The guests inherit 9000 from the hypervisor NIC; nothing in the guest OS sets it.** Verified 2026-07-14 on all three workers: no `mtu:` key in netplan, no MTU in the generated `/run/systemd/network/*.network` files, `/etc/network/interfaces` absent (that path is the *Proxmox* mechanism, not Ubuntu's), `ifupdown` never installed, `/etc/systemd/network/` empty. Interfaces still come up at 9000 and survive reboot.
+  - **The MTU therefore rests on two layers, not three, and the guest has no backstop.** If the Proxmox NIC/bridge config is reset or a VM is rebuilt, MTU silently drops to 1500 — throughput degrades with no error, which is the failure mode `hack/scripts/set-storage-mtu.sh` was written to warn about. Ownership belongs in **Terraform** (roadmap item 7, VM lifecycle) rather than Ansible, since the hypervisor is authoritative.
+  - `hack/scripts/set-storage-mtu.sh` has been run, but its idempotency guard (`already at $TARGET_MTU, nothing to do`) short-circuits before the netplan write, because the Proxmox layer already delivers 9000. So `/etc/netplan/99-storage-mtu.yaml` does not exist on any worker and the script's guest-side persistence path has never executed. Its `--check` and jumbo-frame verification ping remain useful. Note it targets VLAN 20 only — the VLAN Longhorn does not use.
 - **WireGuard VPN:** Road warrior config for remote management from PC and Mac workstations
+- **Tailscale subnet router:** Debian LXC on pve3 (CTID 200), single-homed on VLAN 10, advertises `10.0.10.0/24` into the tailnet for **CGNAT remote access** — inbound WireGuard can't traverse the carrier-grade-NAT WAN. Tagged/non-expiring node; ACL restricts the route to the operator's identity (sole compensating control, cluster has zero NetworkPolicies). Deliberately isolated — not on any K3s node or OPNsense. Management plane (VLAN 99) intentionally **not** remotely reachable. See `docs/tailscale-subnet-router.md`.
 - **DNS:** OPNsense Unbound, serving CLIENT_LAN, MGMT, PROXMOX, and VPN interfaces
 - **Segmentation:** CLIENT_LAN is blocked from all infrastructure VLANs by design
 
@@ -109,7 +117,7 @@ Workload resources (ingress, PDBs, ServiceMonitors, NetworkPolicies) co-locate w
 
 ## Management Hosts
 
-- Two workstations (PC + Mac) connect over WireGuard VPN
+- Two workstations (PC + Mac) reach the cluster over **two independent, additive overlays**: OPNsense **WireGuard** (works when the client can reach the OPNsense WAN) and the **Tailscale** subnet router (works from anywhere, including CGNAT LTE). WireGuard is unchanged.
 - Both have kubectl, helm, jq, sops, age, Claude Code installed
 - SSH keys pushed from both workstations to all 6 nodes
 - Kubeconfig on both points to kube-vip VIP, context name: `homelab`
@@ -149,6 +157,9 @@ Deferred: CI pipeline, Harbor+Trivy, Vault+External Secrets, Hugo portfolio site
 
 - **CLOSED** ~~kps PVCs on `longhorn-storage-heavy` SC; need migration to `longhorn`, then delete `longhorn-storage-heavy`.~~
 - Longhorn backup target unconfigured.
+- VLAN 20 carries no Longhorn traffic (`storage-network` unset); a dedicated 10GbE segment sits idle while storage contends with cluster/API/pod traffic on VLAN 10. Decide: point Longhorn at it (needs a Multus NetworkAttachmentDefinition — non-trivial) or retire the segment and stop describing it as storage replication. Expected gain is **isolation, not speed** — both VLANs benchmark identically (~9.5 Gbps), and the write bottleneck was CPU, not network.
+- SATA SSD write ceiling assumed ~500 MB/s but never measured on actual disks; replicas measured disk-bound (iowait ~27%) but headroom unquantified. Measure before acting on any disk-bound conclusion.
+- Each pve host now 7 vCPU (CP 4 + worker 3) on 6 physical cores; etcd CP shares an oversubscribed host with a storage worker (steal ~0.3-0.5%). Structural, not urgent. pve3 also runs the 1-vCPU Tailscale LXC (idle, negligible steal).
 - Zero NetworkPolicies.
 - Missing resource requests/limits on pods.
 - **CLOSED** ~~cert-manager certs expire June 2026~~ Auto-renewal is 2026-05-19. 90-day duration and renewal at 2/3 of the lifetime (i.e., 30 days before expiry).
@@ -181,7 +192,7 @@ Deferred: CI pipeline, Harbor+Trivy, Vault+External Secrets, Hugo portfolio site
 - Flag non-optimal setup decisions proactively and suggest improvements.
 - Prefer automation over manual steps; if something can be codified, codify it.
 - When writing manifests/values files, include comments explaining *why* a value is set, not just what it is.
-- Keep resource footprint in mind; this is a homelab, not a cloud account with infinite headroom (total cluster: ~18 vCPU, ~66GB RAM across 6 nodes).
+- Keep resource footprint in mind; this is a homelab, not a cloud account with infinite headroom (total cluster: ~21 vCPU, ~66GB RAM across 6 nodes).
 - Validate changes against the cluster topology before suggesting them (e.g., don't assume unlimited replicas).
 - When in doubt, check the actual cluster state with kubectl rather than assuming.
 - HELM_MAX_HISTORY=5 is set; keep revision count low.

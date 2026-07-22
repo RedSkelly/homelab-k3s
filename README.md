@@ -21,13 +21,13 @@ Production-patterned Kubernetes platform built on bare metal, designed to be tor
      │              │               │
 ┌────┴──────────────┴───────────────┴────┐
 │  MikroTik CRS305 — access              │
-│  VLAN 20: Longhorn storage replication │
-│  (isolated east-west, not routed)      │
+│  VLAN 20: isolated east-west segment   │
+│  (provisioned; Longhorn not using it)  │
 └────────────────────────────────────────┘
 
 K3s v1.34 — embedded etcd HA
 ├── 3x control plane  (4 vCPU / 10GB RAM)
-└── 3x worker         (2 vCPU / 12GB RAM)
+└── 3x worker         (3 vCPU / 12GB RAM)
     VIP: kube-vip (floating)
 ```
 
@@ -44,12 +44,13 @@ K3s v1.34 — embedded etcd HA
 | Monitoring | kube-prometheus-stack (Prometheus, Grafana, Alertmanager) | Running |
 | Chart management | Helmfile | Running |
 | Secrets | SOPS + age | Running |
-| GitOps | Argo CD | Planned |
+| GitOps | Argo CD | Running |
 | Policy enforcement | Kyverno | Planned |
 | Log aggregation | Loki | Planned |
 | Node config | Ansible | Planned |
 | VM provisioning | Terraform (bpg/proxmox) | Planned |
 | Firewall / VPN | OPNsense + WireGuard | Running |
+| Remote access (CGNAT) | Tailscale subnet router (isolated LXC) | Running |
 | Networking | MikroTik (VLAN trunk, 10GbE SFP+) | Running |
 
 ## Repo Layout
