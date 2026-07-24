@@ -2,16 +2,16 @@
 
 Architecture docs, decision records, and operational runbooks. Supplements inline README files in each component directory.
 
-**Currently here:** `tailscale-subnet-router.md` (design record + runbook) and `benchmarks/` (performance baselines). The `adr/` / `runbooks/` / `architecture.md` structure below is the target layout.
+## Contents
 
-## What belongs here
-
-| Document                     | Purpose                                                  |
-|------------------------------|----------------------------------------------------------|
-| `architecture.md`           | Network topology, cluster layout, data flow diagrams      |
-| `adr/`                      | Architecture Decision Records (numbered, immutable)       |
-| `runbooks/`                 | Step-by-step procedures for operational tasks              |
-| `disaster-recovery.md`      | Rebuild-from-scratch procedure using this repo             |
+| Document / dir               | Purpose                                              | Status  |
+|------------------------------|------------------------------------------------------|---------|
+| `tailscale-subnet-router.md` | CGNAT remote-access design record + runbook          | Present |
+| `benchmarks/`                | Performance baselines; re-run to catch regressions   | Present |
+| `architecture.md`            | Network topology, cluster layout, data-flow diagrams | Planned |
+| `adr/`                       | Architecture Decision Records (numbered, immutable)  | Planned |
+| `runbooks/`                  | Step-by-step operational procedures                  | Planned |
+| `disaster-recovery.md`       | Rebuild-from-scratch procedure using this repo       | Planned |
 
 ## Architecture Decision Records (ADRs)
 
