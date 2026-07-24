@@ -11,8 +11,8 @@ Automates TLS certificate issuance and renewal via ACME or self-signed CAs.
 
 ## Design notes
 
-- Current version: v1.19.2, installed via Helm (1 revision)
+- Current version: v1.19.2, managed by Argo CD (migrated from Helmfile 2026-04-29)
 - Chart: `jetstack/cert-manager` from `https://charts.jetstack.io`
 - CRDs are installed with the chart (`installCRDs: true`)
-- Current certs expire June 2026
+- Certs auto-renew (90-day duration, renewal ~30 days before expiry)
 - ClusterIssuer resources go here alongside the chart values — they're tightly coupled to cert-manager's lifecycle

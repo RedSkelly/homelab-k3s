@@ -16,7 +16,7 @@ kubernetes/
 
 ## How it works
 
-**Argo CD is the primary reconciler.** Each component directory contains:
+**Argo CD is the target reconciler** (migration in progress — see current state below). Each component directory contains:
 
 - `values.yaml` — Helm values for the chart (hand-authored, intent-based)
 - Argo CD `Application` manifest — tells Argo CD where to find the chart and which values to use
@@ -38,6 +38,8 @@ The layers deploy in sequence — each depends on the one above:
 4. **security/** — Kyverno, Harbor
 5. **apps/** — Hugo portfolio site
 6. **ci/** — CI pipeline
+
+> **Current migration state:** Argo CD manages cert-manager only. ingress-nginx and kube-prometheus-stack are still Helmfile-managed; MetalLB, Longhorn, and kube-vip are still kubectl/static-pod. The layout above is the GitOps target, migrated to incrementally.
 
 ## Secrets
 

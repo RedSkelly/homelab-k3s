@@ -1,6 +1,14 @@
 # homelab-k3s
 
-Production-patterned Kubernetes platform built on bare metal, designed to be torn down and rebuilt entirely from code. The value here is the deployment pipeline and operational patterns, not the workloads.
+Production-patterned Kubernetes platform on bare metal, built GitOps-first to be reproducible from code. The value is in the deployment pipeline and operational patterns, not the workloads.
+
+## Highlights
+
+- **HA control plane** — 3-node embedded-etcd K3s behind a kube-vip floating VIP.
+- **GitOps migration** — Helmfile → Argo CD, with SOPS + age encrypting secrets in Git.
+- **Replicated storage** — Longhorn default StorageClass with documented drain/reboot runbooks.
+- **CGNAT remote access** — Tailscale subnet router (isolated LXC), ACL-scoped; WireGuard kept for on-LAN.
+- **Measured, not guessed** — storage-replication and jumbo-frame benchmarks under `docs/benchmarks/`.
 
 ## Architecture
 
@@ -29,6 +37,8 @@ K3s v1.34 — embedded etcd HA
 ├── 3x control plane  (4 vCPU / 10GB RAM)
 └── 3x worker         (3 vCPU / 12GB RAM)
     VIP: kube-vip (floating)
+
+Remote access: OPNsense WireGuard (on-LAN) + Tailscale subnet-router LXC on pve3 (CGNAT)
 ```
 
 ## Stack
@@ -58,7 +68,7 @@ K3s v1.34 — embedded etcd HA
 ```
 .
 ├── ansible/              # Node configuration (planned)
-├── docs/                 # Runbooks, architecture decisions
+├── docs/                 # Runbooks, decisions, benchmarks
 ├── hack/                 # Utilities and one-off scripts
 ├── kubernetes/
 │   ├── apps/             # Application workloads
@@ -77,3 +87,7 @@ Resources like ingresses, PDBs, ServiceMonitors, and NetworkPolicies are co-loca
 - **GitOps-first:** The repo is the source of truth. Nodes are runtime targets, not places to edit files.
 - **Rebuild from scratch:** Every layer is designed to be reproducible from code. No snowflake state.
 - **Idempotent and modular:** Each component is independently deployable, testable, and replaceable.
+
+---
+
+See [`docs/`](docs/) for runbooks, architecture decisions, and benchmark results.

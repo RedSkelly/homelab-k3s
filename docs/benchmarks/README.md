@@ -6,7 +6,7 @@ Baseline performance measurements for the homelab platform. Re-run after signifi
 
 | Benchmark | What It Measures | Last Run |
 |-----------|-----------------|----------|
-| [storage-replication](storage-replication/) | VLAN 20 network throughput (iperf3) + Longhorn replicated I/O (fio) | 2026-04-29 |
+| [storage-replication](storage-replication/) | Network throughput (iperf3, VLAN 10 & 20) + Longhorn replicated I/O (fio) | 2026-07-14 |
 
 ## When to Re-run
 
@@ -15,7 +15,7 @@ Baseline performance measurements for the homelab platform. Re-run after signifi
 - NIC driver or firmware update (Mellanox)
 - MikroTik switch configuration change (MTU, VLAN, QoS)
 - Longhorn replica count or StorageClass parameter change
-- After enabling jumbo frames on VLAN 20
+- After an MTU change on the cluster/storage VLANs (jumbo frames enabled 2026-07-14)
 
 ## How Results Are Stored
 

@@ -15,6 +15,7 @@ GitOps reconciler — chosen over Flux for demo-ability and UI.
 
 ## Design notes
 
+- **Current state:** deployed (non-HA, chart 9.5.9, app v3.3.8); so far it manages cert-manager only, with app-of-apps expansion pending
 - Argo CD is bootstrapped via Helmfile, then manages its own upgrades
 - The app-of-apps pattern allows each component directory to define its own Application manifest
 - Argo CD watches this Git repo and reconciles cluster state to match

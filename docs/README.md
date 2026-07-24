@@ -2,6 +2,8 @@
 
 Architecture docs, decision records, and operational runbooks. Supplements inline README files in each component directory.
 
+**Currently here:** `tailscale-subnet-router.md` (design record + runbook) and `benchmarks/` (performance baselines). The `adr/` / `runbooks/` / `architecture.md` structure below is the target layout.
+
 ## What belongs here
 
 | Document                     | Purpose                                                  |
