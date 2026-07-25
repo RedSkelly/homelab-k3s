@@ -20,7 +20,7 @@ A production-patterned K3s homelab designed as a living portfolio. The value is 
 
 ### K3s Cluster
 - **Version:** k3s v1.34.3+k3s1, embedded etcd HA
-- **OS:** Ubuntu 24.04, kernel 6.8.0-110-generic
+- **OS:** Ubuntu 24.04, kernel 6.8.0-134-generic
 - **Control plane (3 nodes):**
   - k3s-cp-01 / 02 / 03 on VLAN 10 (4 vCPU / 10GB RAM / 64GB disk, from NVMe SSD)
 - **Workers (3 nodes):**
