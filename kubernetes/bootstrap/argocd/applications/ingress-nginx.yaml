@@ -1,0 +1,55 @@
+# Argo CD Application -- ingress-nginx
+#
+# Migrated from Helmfile to Argo CD management (repeats the cert-manager
+# migration pattern). Points at the upstream ingress-nginx Helm chart at the
+# exact version previously deployed via Helmfile (chart 4.14.1 / app v1.14.1).
+#
+# Unlike cert-manager (whose values were trivial chart defaults, inlined as
+# valuesObject), ingress-nginx has a real hand-authored values file. To keep a
+# single source of truth -- the same values.yaml that helmfile.yaml consumes --
+# this Application references that file BY PATH using a multi-source setup:
+#   - source 1: the upstream chart
+#   - source 2: this Git repo, exposed as the `$values` ref, so valueFiles can
+#     resolve kubernetes/core/ingress-nginx/values.yaml from repo root.
+# The Git source needs no repository secret: the repo is public, so Argo CD
+# clones it anonymously.
+#
+# syncPolicy is manual (no automated sync/prune/selfHeal), mirroring
+# cert-manager, so the first reconcile and all later changes are human-triggered.
+#
+# ServerSideApply is enabled to match the established migration pattern and
+# avoid the client-side apply annotation size limit.
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ingress-nginx
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  sources:
+    # Upstream chart, pinned to the version Helmfile currently deploys.
+    - repoURL: https://kubernetes.github.io/ingress-nginx
+      chart: ingress-nginx
+      targetRevision: 4.14.1
+      helm:
+        valueFiles:
+          # Resolved from the `$values` ref source below (repo root).
+          - $values/kubernetes/core/ingress-nginx/values.yaml
+    # This Git repo, referenced only to supply the values file above.
+    # `ref` sources render nothing themselves; they just expose the tree.
+    - repoURL: https://github.com/RedSkelly/homelab-k3s.git
+      targetRevision: main
+      ref: values
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ingress-nginx
+
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

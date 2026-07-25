@@ -18,7 +18,11 @@
 #   helmfile status       # Check release status
 #
 # Values files live alongside their component in kubernetes/<layer>/<component>/values.yaml.
-# Both Helmfile and Argo CD reference the same values files — single source of truth.
+# That file is the single source of truth for whichever reconciler owns the component:
+# Helmfile references it directly (below); a component migrated to Argo CD references the
+# same file by path from its Application (e.g. ingress-nginx). No duplicated copies.
+# Exception: cert-manager's values are trivial chart defaults, inlined in its Application,
+# so it has no values.yaml.
 
 ---
 helmDefaults:
@@ -41,13 +45,9 @@ releases:
   # --- core ---
   # cert-manager: migrated to Argo CD management (2026-04-29).
   # Application manifest: kubernetes/bootstrap/argocd/applications/cert-manager.yaml
-
-  - name: ingress-nginx
-    namespace: ingress-nginx
-    chart: ingress-nginx/ingress-nginx
-    version: 4.14.1
-    values:
-      - kubernetes/core/ingress-nginx/values.yaml
+  #
+  # ingress-nginx: migrated to Argo CD management (2026-07-25).
+  # Application manifest: kubernetes/bootstrap/argocd/applications/ingress-nginx.yaml
 
   # --- monitoring ---
   - name: kps

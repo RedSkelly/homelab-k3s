@@ -5,7 +5,7 @@ Ingress controller providing HTTP/HTTPS routing to cluster services.
 ## What belongs here
 
 - `values.yaml` — Helm chart values
-- `application.yaml` — Argo CD Application CRD
+- `bootstrap/argocd/applications/` — Argo CD Application CRD
 
 ## Design notes
 

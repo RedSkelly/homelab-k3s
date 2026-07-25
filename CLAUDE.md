@@ -119,6 +119,7 @@ Deferred: CI pipeline, Harbor+Trivy, Vault+External Secrets, Hugo portfolio site
 - Set a longer duration (e.g. 8760h / 1 year) on the cert-manager CA cert to cut renewal churn (leaf certs are 90-day, auto-renewing ~30 days before expiry).
 - Longhorn/MetalLB/kube-vip not managed by Helm yet (future Helmfile migration).
 - Install helmfile-secrets to Windows as well, modify its plugin file to disable(?) deployment and work as CLI instead, like was done on Mac.
+- The ingress-nginx Argo CD Application is multi-source: it references the in-repo values file by path via a `$values` Git ref, which relies on Argo CD **anonymously cloning the public GitHub repo** (no repository secret is configured). If the repo is made private, this ref breaks — register the repo in Argo CD (a read-only deploy key/token repository secret) before flipping visibility. cert-manager is unaffected (its values are inlined as `valuesObject`). Future path-referencing Applications (e.g. kps, once migrated) inherit the same dependency.
 
 ## Development Principles
 
