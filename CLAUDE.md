@@ -52,10 +52,10 @@ Version = the running app version; Helm chart version noted in the Install Metho
 | kube-vip              | v0.8.2  | static pod          | Floating VIP for API server HA           |
 | MetalLB               | v0.14.5 | kubectl manifest    | LoadBalancer IP allocation               |
 | Longhorn              | v1.6.2  | kubectl manifest    | Sole default StorageClass                |
-| cert-manager          | v1.19.2 | Argo CD             | First Helmfile→Argo CD migration         |
-| ingress-nginx         | v1.14.1 | Helm (chart 4.14.1) | Values file in repo                      |
-| kube-prometheus-stack | v0.88.0 | Helm (chart 81.0.0) | App ver = prometheus-operator; values in repo |
-| Argo CD               | v3.3.8  | Helm (chart 9.5.9)  | Non-HA; SOPS+age on repo-server          |
+| cert-manager          | v1.19.2 | Argo CD                | First Helmfile→Argo CD migration (2026-04-29) |
+| ingress-nginx         | v1.14.1 | Argo CD (chart 4.14.1) | Multi-source $values; values file in repo |
+| kube-prometheus-stack | v0.88.0 | Argo CD (chart 81.0.0) | App ver = prometheus-operator; multi-source values + SOPS overlay; cert-manager-issued admission-webhook cert |
+| Argo CD               | v3.3.8  | Helm (chart 9.5.9)     | Non-HA; SOPS+age on repo-server; bootstrap only |
 
 ## Repo Structure
 
@@ -65,7 +65,7 @@ ansible/       # Node config — swap, kernel, k3s, sudoers, ssh (planned)
 terraform/     # Proxmox VM lifecycle, bpg/proxmox (planned)
 docs/          # Runbooks, architecture decisions, benchmarks
 hack/          # Scripts and utilities
-helmfile.yaml  # Declarative Helm releases
+helmfile.yaml  # Bootstrap/break-glass Helm (now only argocd)
 ```
 
 Workload resources (ingress, PDBs, ServiceMonitors, NetworkPolicies) co-locate with their workload directory, not in central directories. Cluster-scoped resources that span workloads (PriorityClasses) live in `policies/`.
@@ -84,7 +84,7 @@ Workload resources (ingress, PDBs, ServiceMonitors, NetworkPolicies) co-locate w
 
 | Layer              | Tool                          | Purpose                          | Status         |
 |--------------------|-------------------------------|----------------------------------|----------------|
-| Chart management   | Helmfile                      | Declarative Helm releases        | Complete       |
+| Chart management   | Helmfile                      | Bootstrap/break-glass Helm releases | Complete    |
 | Secrets encryption | SOPS + age                    | Encrypt secrets in Git           | Complete       |
 | GitOps reconciler  | Argo CD                       | Continuous delivery from Git     | Running        |
 | Node configuration | Ansible                       | OS-level config, packages        | Planned        |
@@ -92,7 +92,7 @@ Workload resources (ingress, PDBs, ServiceMonitors, NetworkPolicies) co-locate w
 | Dependency updates | Renovate                      | Automate PR-based updates        | Planned        |
 | Git hygiene        | Pre-commit                    | Linting, validation on commit    | Planned        |
 
-**Current state:** No Terraform, Ansible, ~~or Helmfile~~ exists yet. Provisioning was done manually via SSH/shell scripts. Longhorn and MetalLB installed via kubectl manifest. Helmfile manages ingress-nginx, kps, and argocd. cert-manager migrated to Argo CD management (2026-04-29). Values files migrated to repo (2026-04-25). Working files deleted from k3s-cp-01.
+**Current state:** No Terraform or Ansible exists yet. Provisioning was done manually via SSH/shell scripts. Longhorn and MetalLB installed via kubectl manifest. **Helmfile now manages only `argocd`** (bootstrap/break-glass); cert-manager (2026-04-29), ingress-nginx (2026-07-25), and kps (2026-07-26) are all migrated to Argo CD. cert-manager is single-source with values inlined as `valuesObject` (they're trivial); ingress-nginx and kps are multi-source, referencing their in-repo values by path via a `$values` source-ref (a second source tracking the `main` branch). Values files migrated to repo (2026-04-25). Working files deleted from k3s-cp-01.
 
 ## Implementation Roadmap
 
@@ -100,7 +100,7 @@ Ordered by dependency chain — each step enables the next:
 
 1. ~~**Helmfile:** Declare cert-manager, ingress-nginx, kps as Helmfile releases. Clean up kps 29 revisions. Migrate kps PVCs from `longhorn-storage-heavy` → `longhorn` SC. MetalLB/Longhorn/kube-vip Helm migration deferred.~~
 2. ~~**SOPS + age:** Wire `.sops.yaml`, generate age key, encrypt Slack webhook and any other secrets. Must complete before Argo CD.~~
-3. **Argo CD:** ~~Install Argo CD via Helmfile with SOPS+age integration.~~ Deployed (non-HA, Helm chart 9.5.9, app v3.3.8). ~~First migration: cert-manager moved from Helmfile to Argo CD (2026-04-29).~~ Next: migrate remaining Helmfile releases (ingress-nginx, kps), expand to full stack. Migration pattern: create Application with exact chart+values, sync with ServerSideApply, remove from helmfile.yaml, delete Helm release secret.
+3. ~~**Argo CD:** Install via Helmfile with SOPS+age integration; migrate all Helmfile releases.~~ **Complete.** Deployed non-HA (chart 9.5.9, app v3.3.8); cert-manager (2026-04-29), ingress-nginx (2026-07-25), and kps (2026-07-26) migrated. Helmfile now manages only `argocd`. Pattern: create an Application at the exact chart version, `ServerSideApply` sync, remove from helmfile.yaml, delete the Helm release secret. ingress-nginx and kps reference in-repo values by path (multi-source `$values`); cert-manager inlined its trivial values as `valuesObject`. Argo CD is the reconciler for all steps below.
 4. **Kyverno:** First workload deployed via Argo CD. Policies for resource limits + default NetworkPolicies.
 5. **Loki:** Centralized logging, deployed via Argo CD.
 6. **Ansible:** Codify node config (swap, kernel, k3s config, sudoers, SSH keys) as idempotent playbooks. Parallel track.
@@ -119,7 +119,7 @@ Deferred: CI pipeline, Harbor+Trivy, Vault+External Secrets, Hugo portfolio site
 - Set a longer duration (e.g. 8760h / 1 year) on the cert-manager CA cert to cut renewal churn (leaf certs are 90-day, auto-renewing ~30 days before expiry).
 - Longhorn/MetalLB/kube-vip not managed by Helm yet (future Helmfile migration).
 - Install helmfile-secrets to Windows as well, modify its plugin file to disable(?) deployment and work as CLI instead, like was done on Mac.
-- The ingress-nginx Argo CD Application is multi-source: it references the in-repo values file by path via a `$values` Git ref, which relies on Argo CD **anonymously cloning the public GitHub repo** (no repository secret is configured). If the repo is made private, this ref breaks — register the repo in Argo CD (a read-only deploy key/token repository secret) before flipping visibility. cert-manager is unaffected (its values are inlined as `valuesObject`). kps (migrated 2026-07-26) uses the same multi-source pattern and inherits this dependency; its SOPS overlay is consumed via helm-secrets **wrapper mode** — a plain `$values/…/secrets.values.yaml` path, NOT the `secrets://` scheme, which is incompatible with the `$values` ref (Argo won't expand `$values` behind a scheme prefix).
+- The ingress-nginx Argo CD Application is multi-source: it references the in-repo values file by path via a `$values` source-ref, which relies on Argo CD **anonymously cloning the public GitHub repo** (no repository secret is configured). If the repo is made private, this ref breaks — register the repo in Argo CD (a read-only deploy key/token repository secret) before flipping visibility. cert-manager is unaffected (its values are inlined as `valuesObject`). kps (migrated 2026-07-26) uses the same multi-source pattern and inherits this dependency; its SOPS overlay is consumed via helm-secrets **wrapper mode** — a plain `$values/…/secrets.values.yaml` path, NOT the `secrets://` scheme, which is incompatible with the `$values` ref (Argo won't expand `$values` behind a scheme prefix).
 - **kps has two non-obvious settings that must NOT be naively reverted** (each prevents a problem that is painful to rediscover):
   - `prometheusOperator.admissionWebhooks.certManager.enabled: true` (set 2026-07-26). The chart's default kube-webhook-certgen Jobs are Helm `pre-install`/`pre-upgrade` hooks that reliably **wedge Argo CD syncs**: the Job finishes in ~2s and is hook-deleted before Argo records success, parking the sync on "waiting for completion of hook" indefinitely. It survives a controller restart (the stuck state persists in `.status.operationState`); recovery requires forcing the op to `Terminating` via a status patch. With cert-manager issuing the webhook cert there are no hooks, so **normal full syncs work**. (Switching it on is a two-phase transition: the operator pod CrashLoops on a missing cert until the self-signed→root→admission cert chain issues — do a *full* sync so all issuer resources apply, not a selective one.)
   - `grafana.adminPassword` pinned in the SOPS overlay (`secrets.values.yaml`). Without it the chart generates a fresh random password on every `helm template`, so the repo-server render is non-deterministic — the grafana Secret + Deployment (`checksum/secret`) sit permanently OutOfSync and **every sync re-randomizes the admin password**.
