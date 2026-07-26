@@ -2,6 +2,20 @@
 # Helm release name: kps
 # Namespace: monitoring
 
+prometheusOperator:
+  admissionWebhooks:
+    # Issue the admission-webhook TLS cert via cert-manager (already deployed)
+    # instead of the chart's default kube-webhook-certgen Jobs. Those Jobs run
+    # as helm.sh/hook pre-install/pre-upgrade and reliably wedge Argo CD's sync:
+    # the Job completes in ~2s and is hook-deleted before Argo observes success,
+    # leaving the sync operation parked on "waiting for completion" indefinitely
+    # (it even survives a controller restart, since the stuck state is persisted).
+    # With cert-manager, the cert is issued by an Issuer/Certificate and the CA
+    # injector patches the webhook caBundle — no hooks, so normal syncs succeed.
+    # Enabling this auto-disables the patch Jobs (patch.enabled has no effect).
+    certManager:
+      enabled: true
+
 grafana:
   replicas: 1
   deploymentStrategy:

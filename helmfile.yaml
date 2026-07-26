@@ -50,14 +50,9 @@ releases:
   # Application manifest: kubernetes/bootstrap/argocd/applications/ingress-nginx.yaml
 
   # --- monitoring ---
-  - name: kps
-    namespace: monitoring
-    chart: prometheus-community/kube-prometheus-stack
-    version: 81.0.0
-    values:
-      - kubernetes/monitoring/kube-prometheus-stack/values.yaml
-    secrets:
-      - kubernetes/monitoring/kube-prometheus-stack/secrets.values.yaml
+  # kps (kube-prometheus-stack): migrated to Argo CD management (2026-07-26).
+  # Application manifest: kubernetes/bootstrap/argocd/applications/kps.yaml
+  # (values.yaml + SOPS secrets.values.yaml consumed via helm-secrets wrapper mode)
 
   # --- bootstrap ---
   - name: argocd
