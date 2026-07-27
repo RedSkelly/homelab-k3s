@@ -13,12 +13,12 @@
 set -uo pipefail
 
 # The etcd checks read metrics from a control plane node over SSH. Any of the
-# three will do, they all serve the same cluster-wide numbers.
+# three will do; they all serve the same cluster-wide numbers.
 SSH_USER=k3s
 CP_NODE=10.0.10.50
 
-# Only emit color when writing to a terminal. Redirected to a file, the escape
-# codes are printed literally and make the log harder to read than no color.
+# Only emit colour when stdout is a terminal; redirected to a file, the escape
+# codes print literally.
 if [ -t 1 ]; then
     RED=$'\033[0;31m'
     YELLOW=$'\033[0;33m'
@@ -41,8 +41,8 @@ echo
 echo "=== Nodes ==="
 kubectl get nodes -o wide
 
-# Identical nodes should be running identical kernels. If they are not, some
-# subset of them rebooted, and we should know why.
+# Identical nodes should run identical kernels. A difference means some subset
+# of them rebooted.
 KERNELS=$(kubectl get nodes -o custom-columns=KERNEL:.status.nodeInfo.kernelVersion --no-headers | sort -u)
 KERNEL_COUNT=$(echo "$KERNELS" | wc -l | tr -d ' ')
 
@@ -65,12 +65,10 @@ for NODE in $CORDONED; do
     problem "node cordoned: $NODE (Longhorn will not rebuild replicas here)"
 done
 
-# Kubernetes already knows about disk and memory pressure and almost nobody
-# looks. These conditions read "False" when things are healthy, so anything
-# saying "True" is a problem.
+# These conditions read "False" when healthy, so "True" is a problem.
 #
-# Clear the scratch file first. If a previous run crashed partway through, its
-# leftovers would otherwise be reported as if they were found this time.
+# Clear the scratch file first: leftovers from a run that crashed partway
+# through would otherwise be reported as if found this time.
 rm -f /tmp/k3s-diag-pressure
 
 for CONDITION in MemoryPressure DiskPressure PIDPressure; do
@@ -137,15 +135,15 @@ if [ -z "$ETCD_METRICS" ]; then
     echo "  could not reach etcd metrics on $CP_NODE:2381"
 else
     # The database has a 2GB quota by default. Past it, etcd goes read-only and
-    # the whole cluster follows. Well worth knowing before that happens.
+    # the whole cluster follows.
     DB_BYTES=$(echo "$ETCD_METRICS" | awk '/^etcd_mvcc_db_total_size_in_bytes/ {print $2}')
     DB_MB=$(echo "$DB_BYTES" | awk '{printf "%.0f", $1 / 1048576}')
 
     echo "database size: ${DB_MB}MB (quota is 2048MB)"
     [ "$DB_MB" -gt 1500 ] && problem "etcd database is ${DB_MB}MB, approaching the 2048MB quota"
 
-    # No leader means etcd cannot accept writes at all. This is as bad as it gets.
-    # The metric is 1 when a leader exists, 0 when one does not.
+    # No leader means etcd cannot accept writes. The metric is 1 when a leader
+    # exists, 0 when one does not.
     HAS_LEADER=$(echo "$ETCD_METRICS" | awk '/^etcd_server_has_leader/ {print $2}')
 
     if [ "$HAS_LEADER" = "1" ]; then
@@ -154,13 +152,10 @@ else
         problem "ETCD HAS NO LEADER - the cluster cannot accept writes"
     fi
 
-    # Leader elections should be rare, but a handful over months of uptime is
-    # normal and means nothing. Only say anything when the count is high enough to
-    # suggest the CP nodes keep losing contact with each other, which points at
-    # disk or network latency rather than at etcd itself.
-    #
-    # Printing the raw number every run just invites worry with nothing to do
-    # about it, so it is only shown when it crosses the threshold.
+    # A handful of leader changes over months of uptime is normal. A high count
+    # means the CP nodes keep losing contact with each other, which points at
+    # disk or network latency rather than at etcd itself. Only shown when it
+    # crosses the threshold.
     ELECTIONS=$(echo "$ETCD_METRICS" | awk '/^etcd_server_leader_changes_seen_total/ {print $2}')
 
     if [ -n "$ELECTIONS" ] && [ "${ELECTIONS%.*}" -gt 10 ]; then
@@ -168,11 +163,11 @@ else
         problem "etcd has changed leader $ELECTIONS times - check CP disk and network latency"
     fi
 
-    # etcd commits every write to disk before acknowledging it. If that fsync is
-    # slow, everything above it is slow, and on a VM the usual cause is the
-    # Proxmox host being busy rather than anything wrong with etcd.
+    # etcd commits every write to disk before acknowledging it, so a slow fsync
+    # slows everything above it. On a VM the usual cause is a busy Proxmox host
+    # rather than etcd itself.
     #
-    # The metric is a histogram. Its _sum and _count give the running average.
+    # The metric is a histogram; its _sum and _count give the running average.
     FSYNC_SUM=$(echo "$ETCD_METRICS" | awk '/^etcd_disk_wal_fsync_duration_seconds_sum/ {print $2}')
     FSYNC_COUNT=$(echo "$ETCD_METRICS" | awk '/^etcd_disk_wal_fsync_duration_seconds_count/ {print $2}')
 
@@ -214,14 +209,12 @@ fi
 echo
 echo "=== Workloads ==="
 
-# DO NOT parse the default 'kubectl get pods' table. Its columns are a display
-# format, not data: once a pod has restarted, the RESTARTS column reads
-# "10 (2d1h ago)", which shifts every field after it. Ask for the fields by name
-# instead, and they arrive one per column, always.
+# Do not parse the default 'kubectl get pods' table: once a pod has restarted,
+# the RESTARTS column reads "10 (2d1h ago)" and shifts every field after it.
+# Requesting fields by name gives one value per column.
 #
-# STATUS here is .status.phase, which is Running / Pending / Failed / Succeeded.
-# Note that a finished Job shows as Succeeded in the phase, even though the
-# default table prints it as "Completed".
+# PHASE is .status.phase: Running / Pending / Failed / Succeeded. A finished Job
+# has phase Succeeded even though the default table prints it as "Completed".
 PODS=$(kubectl get pods -A -o custom-columns=\
 NS:.metadata.namespace,\
 NAME:.metadata.name,\
@@ -254,7 +247,7 @@ else
     problem "$(echo "$NOT_READY_PODS" | wc -l | tr -d ' ') pods Running but not Ready"
 fi
 
-# Restarts accumulate silently. A pod with 200 restarts is still "Running".
+# A pod with 200 restarts still reports phase Running.
 #
 # RESTARTS is one count per container, comma separated, so add them up. Only look
 # at Running pods: a Succeeded Job that retried a few times is not a live problem.
@@ -314,23 +307,18 @@ kubectl -n longhorn-system get volumes \
     -o custom-columns=NAME:.metadata.name,STATE:.status.state,ROBUSTNESS:.status.robustness,WANT:.spec.numberOfReplicas,ATTACHED:.status.currentNodeID \
     | sed 's/^/  /'
 
-# Replicas are spread across all three workers, but the volume itself attaches to
-# whichever node runs the pod using it. Those are different things, and the second
-# one clusters: several volumes commonly end up attached to the same node.
-#
-# That node then becomes the expensive one to drain, because every volume on it
-# has to detach and reattach elsewhere at the same time. Worth knowing which node
-# that is before one is chosen to be worked on.
+# Replicas are spread across all three workers, but the volume attaches to
+# whichever node runs the pod using it, and several volumes commonly end up on
+# the same node. Draining that node detaches and reattaches all of them at once,
+# so it is worth knowing which node it is before choosing one to work on.
 echo
 echo "volumes attached per node:"
 kubectl -n longhorn-system get volumes \
     -o custom-columns=NODE:.status.currentNodeID --no-headers \
     | sort | uniq -c | awk '{print "  " $2 ": " $1}'
 
-# THE CHECK THAT MATTERS MOST.
-#
-# A volume below its desired replica count has no redundancy margin. Rebooting or
-# draining on top of that is how a recoverable state becomes data loss.
+# A volume below its desired replica count has no redundancy margin. Rebooting
+# or draining on top of that risks data loss.
 #
 # The volume's own 'robustness' field lags behind reality, so count the running
 # replicas directly and compare against what the volume asked for.
@@ -345,9 +333,9 @@ for VOLUME in $(kubectl -n longhorn-system get volumes -o name | cut -d/ -f2); d
     WANTED=$(kubectl -n longhorn-system get volume "$VOLUME" -o jsonpath='{.spec.numberOfReplicas}')
     RUNNING=$(echo "$REPLICAS" | awk -v v="$VOLUME" '$1 == v && $2 == "running"' | wc -l | tr -d ' ')
 
-    # A rebuilding replica is Longhorn working, not Longhorn stuck. It happens
-    # after every drain and reboot and it finishes on its own. Only report a
-    # problem when replicas are missing and nothing is replacing them.
+    # A rebuilding replica happens after every drain and reboot and finishes on
+    # its own. Only report a problem when replicas are missing and nothing is
+    # replacing them.
     REBUILDING=$(echo "$REPLICAS" | awk -v v="$VOLUME" \
         '$1 == v && $2 == "rebuilding"' | wc -l | tr -d ' ')
 
@@ -365,16 +353,16 @@ for VOLUME in $(kubectl -n longhorn-system get volumes -o name | cut -d/ -f2); d
     fi
 done
 
-# Longhorn will not place a replica on a node without room, and it fails silently
-# and permanently. This is where "why won't it rebuild" gets answered.
+# Longhorn will not place a replica on a node without room, and it fails
+# silently and permanently.
 #
-# The number that matters is storageAvailable minus the reservation, not raw free
-# disk. Longhorn holds back a percentage of each disk (25% by default) and will
-# not schedule into it. So a node can look half empty in df and still refuse a
+# The number to use is storageAvailable minus the reservation, not raw free
+# disk: Longhorn holds back a percentage of each disk (25% by default) and will
+# not schedule into it, so a node can look half empty in df and still refuse a
 # replica.
 #
-# Ask for the fields by path. Grepping the JSON would depend on how it happens to
-# be formatted, which is not something to rely on. Sizes come back in bytes.
+# Fields are requested by path rather than grepped, since JSON formatting is not
+# a contract. Sizes come back in bytes.
 echo
 echo "Longhorn node capacity:"
 printf "  %-12s %10s %10s %10s  %s\n" "NODE" "FREE" "RESERVED" "USABLE" "SCHEDULING"
@@ -385,7 +373,7 @@ for NODE in $(kubectl -n longhorn-system get nodes.longhorn.io -o name | cut -d/
         -o jsonpath='{.spec.allowScheduling}')
 
     # A node can have several disks, so these come back space separated. These
-    # homelab nodes have one each.
+    # nodes have one each.
     AVAILABLE=$(kubectl -n longhorn-system get nodes.longhorn.io "$NODE" \
         -o jsonpath='{.status.diskStatus.*.storageAvailable}')
     MAXIMUM=$(kubectl -n longhorn-system get nodes.longhorn.io "$NODE" \
@@ -406,9 +394,8 @@ for NODE in $(kubectl -n longhorn-system get nodes.longhorn.io -o name | cut -d/
     fi
 done
 
-# Can the biggest volume find a home? Longhorn insists each replica sits on a
-# different node, so with three workers and three replicas there is no slack:
-# every worker must be able to hold every volume.
+# Longhorn requires each replica on a different node, so with three workers and
+# three replicas every worker must be able to hold every volume.
 echo
 echo "can every node hold the largest volume?"
 
@@ -439,7 +426,7 @@ for NODE in $(kubectl -n longhorn-system get nodes.longhorn.io -o name | cut -d/
 done
 
 # The engine image runs the volume. If it is not deployed on a node, volumes
-# cannot attach there, and the error returned says nothing about engine images.
+# cannot attach there, and the error returned does not mention engine images.
 echo
 echo "engine images:"
 kubectl -n longhorn-system get engineimages.longhorn.io \
@@ -470,8 +457,8 @@ for JOB in $FAILED_JOBS; do
     problem "recurring job pod failed: $JOB (snapshots may not be running)"
 done
 
-# No backup target means no offsite copy. Replication is not backup: it protects
-# against a disk dying, not against deleting the wrong thing.
+# No backup target means no offsite copy. Replication protects against a disk
+# dying, not against deleting the wrong thing.
 BACKUP_TARGET=$(kubectl -n longhorn-system get settings.longhorn.io backup-target \
     -o jsonpath='{.value}' 2>/dev/null)
 
@@ -488,20 +475,18 @@ echo
 echo "=== PodDisruptionBudgets ==="
 kubectl get pdb -A | sed 's/^/  /'
 
-# A PDB showing 0 allowed disruptions blocks eviction, for two very different
-# reasons that are dangerous to confuse:
+# A PDB showing 0 allowed disruptions blocks eviction for two reasons that must
+# not be confused:
 #
-#   WAIT   Longhorn creates the instance-manager and csi-* PDBs itself and
-#          removes them once volumes detach. They correctly show 0 allowed while
-#          volumes are attached. Force-deleting those pods rips volumes out from
-#          under running workloads. Wait them out.
+#   WAIT   Longhorn's own instance-manager and csi-* PDBs, which show 0 allowed
+#          while volumes are attached and clear once they detach. Force-deleting
+#          those pods rips volumes out from under running workloads.
 #
 #   FAIL   minAvailable >= the number of pods that exist. Nothing satisfies it,
 #          so waiting never helps and the drain retries forever. Fix the PDB.
 #
-# The numbers cannot tell them apart - both can read minAvailable=1 against a
-# single pod. What separates them is whether anything will ever clear the
-# condition, which comes down to who owns the PDB. So match Longhorn's own
+# The numbers cannot tell them apart, since both can read minAvailable=1 against
+# a single pod. What separates them is who owns the PDB, so match Longhorn's
 # dynamically-managed PDBs by name and treat those as transient.
 
 is_longhorn_managed() {
@@ -541,7 +526,7 @@ else
     done
 
     # The while loop above ran in a subshell (because of the pipe), so it could
-    # not add to PROBLEMS directly. Collect what it wrote to disk instead.
+    # not append to PROBLEMS. Collect what it wrote to disk instead.
     if [ -f /tmp/k3s-diag-broken-pdbs ]; then
         while read -r PDB; do
             problem "unsatisfiable PDB: $PDB (blocks every drain forever)"
@@ -569,10 +554,9 @@ echo
 echo "LoadBalancer services:"
 kubectl get svc -A --field-selector spec.type=LoadBalancer | sed 's/^/  /'
 
-# A LoadBalancer with no external IP means MetalLB never gave it one, usually
-# because the address pool is exhausted. Ask for the field directly: an
-# unassigned service simply has nothing under status.loadBalancer, which
-# custom-columns renders as <none>.
+# A LoadBalancer with no external IP means MetalLB never assigned one, usually
+# because the address pool is exhausted. An unassigned service has nothing under
+# status.loadBalancer, which custom-columns renders as <none>.
 PENDING_LB=$(kubectl get svc -A --field-selector spec.type=LoadBalancer \
     -o custom-columns=\
 NS:.metadata.namespace,\
@@ -589,8 +573,7 @@ echo
 echo "ingresses:"
 kubectl get ingress -A | sed 's/^/  /'
 
-# Zero NetworkPolicies means every pod can reach every other pod. Worth knowing
-# even if we decided to live with it for now.
+# Zero NetworkPolicies means every pod can reach every other pod.
 NETPOL_COUNT=$(kubectl get networkpolicy -A --no-headers 2>/dev/null | wc -l | tr -d ' ')
 echo
 echo "network policies: $NETPOL_COUNT"
@@ -602,8 +585,8 @@ echo "=== Certificates ==="
 
 kubectl get certificates -A | sed 's/^/  /'
 
-# A cert that is not Ready will not renew.
-# Read the Ready condition by name rather than by column position.
+# A cert that is not Ready will not renew. Read the Ready condition by name
+# rather than by column position.
 NOT_READY_CERTS=$(kubectl get certificates -A \
     -o custom-columns=\
 NS:.metadata.namespace,\

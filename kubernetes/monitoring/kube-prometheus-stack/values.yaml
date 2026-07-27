@@ -4,14 +4,11 @@
 
 prometheusOperator:
   admissionWebhooks:
-    # Issue the admission-webhook TLS cert via cert-manager (already deployed)
-    # instead of the chart's default kube-webhook-certgen Jobs. Those Jobs run
-    # as helm.sh/hook pre-install/pre-upgrade and reliably wedge Argo CD's sync:
-    # the Job completes in ~2s and is hook-deleted before Argo observes success,
-    # leaving the sync operation parked on "waiting for completion" indefinitely
-    # (it even survives a controller restart, since the stuck state is persisted).
-    # With cert-manager, the cert is issued by an Issuer/Certificate and the CA
-    # injector patches the webhook caBundle — no hooks, so normal syncs succeed.
+    # Issue the admission-webhook TLS cert via cert-manager instead of the
+    # chart's default kube-webhook-certgen Jobs. Those Jobs are helm.sh/hook
+    # pre-install/pre-upgrade and wedge Argo CD syncs: the Job is hook-deleted
+    # before Argo observes success, so the sync parks on "waiting for completion"
+    # and survives a controller restart. With cert-manager there are no hooks.
     # Enabling this auto-disables the patch Jobs (patch.enabled has no effect).
     certManager:
       enabled: true

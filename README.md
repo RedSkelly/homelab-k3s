@@ -1,14 +1,14 @@
 # homelab-k3s
 
-Production-patterned Kubernetes platform on bare metal, built GitOps-first to be reproducible from code. The value is in the deployment pipeline and operational patterns, not the workloads.
+Production-patterned Kubernetes platform on bare metal, built GitOps-first to be reproducible from code.
 
 ## Highlights
 
-- **HA control plane** — 3-node embedded-etcd K3s behind a kube-vip floating VIP.
-- **GitOps migration** — Helmfile → Argo CD, with SOPS + age encrypting secrets in Git.
-- **Replicated storage** — Longhorn default StorageClass with documented drain/reboot runbooks.
-- **CGNAT remote access** — Tailscale subnet router (isolated LXC), ACL-scoped; WireGuard kept for on-LAN.
-- **Measured, not guessed** — storage-replication and jumbo-frame benchmarks under `docs/benchmarks/`.
+- **HA control plane:** 3-node embedded-etcd K3s behind a kube-vip floating VIP.
+- **GitOps:** Helmfile → Argo CD, with SOPS + age encrypting secrets in Git.
+- **Replicated storage:** Longhorn default StorageClass with documented drain/reboot runbooks.
+- **CGNAT remote access:** Tailscale subnet router (isolated LXC), ACL-scoped; WireGuard kept for on-LAN.
+- **Benchmarks:** storage-replication and jumbo-frame results under `docs/benchmarks/`.
 
 ## Architecture
 
@@ -19,7 +19,7 @@ Production-patterned Kubernetes platform on bare metal, built GitOps-first to be
 └───────────────────┬───────────────────────────┘
                     │ SFP+ trunk (VLANs 10, 40, 99)
 ┌───────────────────┴───────────────────────────┐
-│  MikroTik CRS310 — core / distribution        │
+│  MikroTik CRS310 - core / distribution        │
 └────┬──────────────┬───────────────┬───────────┘
      │              │               │
 ┌────┴────┐   ┌─────┴─────┐    ┌────┴────┐
@@ -28,12 +28,12 @@ Production-patterned Kubernetes platform on bare metal, built GitOps-first to be
 └────┬────┘   └─────┬─────┘    └────┬────┘  Mellanox 10GbE SFP+
      │              │               │
 ┌────┴──────────────┴───────────────┴────┐
-│  MikroTik CRS305 — access              │
+│  MikroTik CRS305 - access              │
 │  VLAN 20: isolated east-west segment   │
 │  (provisioned; Longhorn not using it)  │
 └────────────────────────────────────────┘
 
-K3s v1.34 — embedded etcd HA
+K3s v1.34, embedded etcd HA
 ├── 3x control plane  (4 vCPU / 10GB RAM)
 └── 3x worker         (3 vCPU / 12GB RAM)
     VIP: kube-vip (floating)
@@ -80,12 +80,12 @@ Remote access: OPNsense WireGuard (on-LAN) + Tailscale subnet-router LXC on pve3
 └── helmfile.yaml         # Declarative Helm release management
 ```
 
-Resources like ingresses, PDBs, ServiceMonitors, and NetworkPolicies are co-located with their workload; not centralized.
+Resources like ingresses, PDBs, ServiceMonitors, and NetworkPolicies are co-located with their workload, not centralized.
 
 ## Principles
 
 - **GitOps-first:** The repo is the source of truth. Nodes are runtime targets, not places to edit files.
-- **Rebuild from scratch:** Every layer is designed to be reproducible from code. No snowflake state.
+- **Rebuild from scratch:** Every layer is reproducible from code.
 - **Idempotent and modular:** Each component is independently deployable, testable, and replaceable.
 
 ---

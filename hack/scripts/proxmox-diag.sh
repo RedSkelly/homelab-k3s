@@ -4,10 +4,10 @@
 #
 # Diagnostic for the Proxmox hosts underneath the K3s cluster. Read-only.
 #
-# This exists because the K3s nodes are VMs. When something goes wrong on a host,
-# the guests only show the aftermath. A host that loses power takes its CP
-# node and its worker with it, and from inside the cluster that looks like two
-# unrelated nodes rebooting at once.
+# The K3s nodes are VMs, so when something goes wrong on a host the guests only
+# show the aftermath. A host that loses power takes its CP node and its worker
+# with it, which from inside the cluster looks like two unrelated nodes
+# rebooting at once.
 #
 # Usage:
 #   ./proxmox-diag.sh              # all hosts
@@ -21,7 +21,7 @@ SSH_USER=root
 
 # The Proxmox hosts themselves, not the K3s VMs running on them.
 #
-# Each host also has addresses on VLAN 20 (storage replication, 10.0.20.x) and
+# Each host also has addresses on VLAN 20 (provisioned for storage, 10.0.20.x) and
 # VLAN 99 (management, 10.0.99.x). These are the VLAN 10 addresses, which is the
 # path the workstation reaches them on over WireGuard.
 HOSTS="
@@ -33,9 +33,8 @@ HOSTS="
 [ $# -gt 0 ] && HOSTS="$1"
 
 
-# ControlMaster reuses one connection per host for every command that follows,
-# rather than a fresh handshake each time. This script runs a lot of small qm and
-# smartctl calls, and without it most of the runtime is SSH setup.
+# ControlMaster reuses one connection per host instead of a fresh handshake per
+# command. This script runs many small qm and smartctl calls.
 SSH_OPTS="
 -o ConnectTimeout=5
 -o BatchMode=yes
@@ -56,9 +55,8 @@ check_host() {
     echo "================================================================"
 
     # A bare "UNREACHABLE" collapses no route, no listener, wrong key, and an
-    # unknown host key into one word, and they need completely different fixes.
-    # Run the probe again without discarding stderr and print what SSH actually
-    # said.
+    # unknown host key into one word, and each needs a different fix. Re-run the
+    # probe without discarding stderr and print what SSH said.
     if ! run true; then
         echo "  UNREACHABLE"
         ssh $SSH_OPTS "$SSH_USER@$HOST" true 2>&1 | sed 's/^/    /'
@@ -72,24 +70,22 @@ check_host() {
     echo "uptime:   $(run 'uptime -p')"
     echo "booted:   $(run 'uptime -s')"
 
-    # A host reboot takes both of its guests with it. If a host booted recently
-    # and no one rebooted it, that is the thing to explain.
+    # A host reboot takes both of its guests with it, so a recent boot that
+    # nobody initiated needs explaining.
     echo
     echo "recent boots:"
     run 'last -x reboot shutdown | head -4' | sed 's/^/  /'
 
     # A clean shutdown writes a "shutdown" record before the next "reboot". A
-    # power cut writes nothing: the log just stops, and the next thing in it is
-    # the boot that followed. So a reboot with no shutdown line above it is a
+    # power cut writes nothing, so a reboot with no shutdown line above it is a
     # host that died hard.
     #
-    # wtmp is the source, not the journal. Reading the tail of the previous
-    # boot's journal for the word "shutdown" only ever looks one boot back and
-    # depends on what the last log lines happened to say. This walks every boot
-    # in the window instead.
+    # wtmp is the source rather than the journal: reading the previous boot's
+    # journal for the word "shutdown" only looks one boot back. This walks every
+    # boot in the window.
     #
-    # last prints newest first, so reverse it with tac and walk forward. Each
-    # reboot is then judged against whether a shutdown preceded it.
+    # last prints newest first, so reverse it with tac and walk forward, judging
+    # each reboot against whether a shutdown preceded it.
     echo
     echo "unclean shutdowns (a reboot with no shutdown recorded before it):"
 
@@ -149,13 +145,13 @@ check_host() {
     echo "cores: $(run nproc)"
     echo "load:  $(run 'cat /proc/loadavg')"
 
-    # The host is what actually owns the memory. If it is overcommitted, the
-    # guests get squeezed and it shows up inside them as unexplained slowness.
+    # The host owns the memory. If it is overcommitted the guests are squeezed,
+    # which presents inside them as slowness with no local cause.
     echo
     run 'free -h' | sed 's/^/  /'
 
-    # Total vCPU and RAM handed out to guests, against what the host actually has.
-    # Some overcommit is normal and fine. A lot can lead to CPU steal.
+    # Total vCPU and RAM handed out to guests, against what the host has. Some
+    # overcommit is expected; heavy overcommit shows up as CPU steal.
     echo
     echo "allocated to guests vs available on host:"
 
@@ -179,9 +175,9 @@ check_host() {
         echo "  WARNING: more memory promised to guests than the host has"
     fi
 
-    # Ballooning lets the host reclaim memory from a guest under pressure. On a
-    # Kubernetes node that is a bad idea: the kubelet sizes itself to the memory
-    # it saw at boot, and does not notice when it is taken away.
+    # Ballooning lets the host reclaim memory from a guest under pressure. The
+    # kubelet sizes itself to the memory it saw at boot and does not notice when
+    # it is taken away, so ballooning should be off on Kubernetes nodes.
     echo
     echo "guests with ballooning enabled:"
     BALLOONING=""
@@ -196,14 +192,14 @@ check_host() {
     [ -z "$BALLOONING" ] && echo "  none (correct for Kubernetes nodes)"
 
     echo
-    echo "--- Storage network (VLAN 20) ---"
+    echo "--- VLAN 20 segment (provisioned, not used by Longhorn) ---"
 
-    # The hosts carry VLAN 20 addresses, but Longhorn replicates between the
-    # WORKER VMs, which have their own (10.0.20.60-62). So the meaningful test of
-    # the replication path lives in linux-diag.sh, not here.
+    # Longhorn does not replicate over VLAN 20: `storage-network` is unset, so
+    # replication rides VLAN 10. The hosts carry VLAN 20 addresses, and so do the
+    # worker VMs (10.0.20.60-62), which linux-diag.sh checks.
     #
-    # All this proves is that the underlay the guests ride on is up. A pass here
-    # does not mean the workers can reach each other.
+    # This only shows the underlay is up; a pass here does not mean the workers
+    # can reach each other.
     LAST_OCTET=$(echo "$HOST" | cut -d. -f4)
     STORAGE_IP="10.0.20.$LAST_OCTET"
 
@@ -213,7 +209,7 @@ check_host() {
         echo "  $STORAGE_IP is not configured on this host"
     else
         echo "  $STORAGE_LINE"
-        echo "  (run linux-diag.sh to test the path Longhorn actually replicates over)"
+        echo "  (run linux-diag.sh to test the workers' VLAN 20 legs)"
     fi
 
     echo
@@ -222,8 +218,8 @@ check_host() {
     echo "storage pools:"
     run 'pvesm status' | sed 's/^/  /'
 
-    # A full pool means VMs cannot write, and that presents as filesystem errors
-    # inside the guest rather than as anything obviously host-related.
+    # A full pool means VMs cannot write, which presents as filesystem errors
+    # inside the guest rather than as a host-level error.
     FULL_POOLS=$(run "pvesm status | awk 'NR>1 && \$7+0 > 85 {print \$1, \$7}'")
     if [ -n "$FULL_POOLS" ]; then
         echo
@@ -235,7 +231,7 @@ check_host() {
     echo "host filesystem:"
     run 'df -h / /var/lib/vz 2>/dev/null' | sed 's/^/  /'
 
-    # If the host runs ZFS, its health is not optional reading.
+    # ZFS pool health, if the host runs ZFS.
     if run 'command -v zpool' >/dev/null; then
         echo
         echo "ZFS pools:"
@@ -250,14 +246,14 @@ check_host() {
     echo
     echo "--- Disks ---"
 
-    # These are physical machines with real disks, unlike the guests. SMART is
-    # meaningful here and it is the only place to see a disk starting to die.
+    # These are physical machines with real disks, so SMART data is meaningful
+    # here and not in the guests.
     for DISK in $(run "lsblk -dn -o NAME | grep -E '^(sd|nvme)'"); do
         HEALTH=$(run "smartctl -H /dev/$DISK 2>/dev/null | grep -i 'overall-health\|SMART Health'")
         echo "  /dev/$DISK: ${HEALTH:-no SMART data}"
 
-        # Unsafe shutdowns count power cuts. A number that climbs is a power
-        # problem, recorded by the disk itself.
+        # Unsafe shutdowns count power cuts, as recorded by the disk itself. A
+        # climbing number is a power problem.
         UNSAFE=$(run "smartctl -A /dev/$DISK 2>/dev/null | awk '/Unsafe_Shutdown|unsafe_shutdowns/ {print \$NF}'")
         [ -n "$UNSAFE" ] && echo "      unsafe shutdowns: $UNSAFE"
     done
@@ -285,8 +281,8 @@ check_host() {
     echo
     echo "--- Updates ---"
 
-    # A host that reboots itself takes two cluster nodes down with no warning and
-    # no drain. This must be off.
+    # A host that reboots itself takes two cluster nodes down with no drain.
+    # This must be off.
     AUTO_REBOOT=$(run 'grep -rh "Automatic-Reboot" /etc/apt/apt.conf.d/ 2>/dev/null | grep -v "^//"')
 
     if [ -z "$AUTO_REBOOT" ]; then
@@ -294,7 +290,7 @@ check_host() {
     else
         echo "Automatic-Reboot: $AUTO_REBOOT"
         echo "$AUTO_REBOOT" | grep -qi true && \
-            echo "  DANGER: this host can reboot itself, taking both its guests down without draining"
+            echo "  WARNING: this host can reboot itself, taking both its guests down without draining"
     fi
 
     echo
@@ -314,7 +310,6 @@ echo "================================================================"
 echo "Done."
 echo
 echo "Each host runs one control plane VM and one worker. A host that goes down"
-echo "takes both with it, so a single host failure looks like two unrelated node"
-echo "failures from inside the cluster. Check here first when guests reboot for"
-echo "no apparent reason."
+echo "takes both with it, so a single host failure presents as two unrelated"
+echo "node failures from inside the cluster."
 echo "================================================================"

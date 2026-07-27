@@ -16,5 +16,5 @@ Reusable roles following standard Ansible role structure (`tasks/`, `handlers/`,
 ## Design notes
 
 - Each role must be idempotent
-- Roles should not assume execution order — use playbooks for orchestration
+- Roles should not assume execution order; use playbooks for orchestration
 - Keep roles scoped to a single concern

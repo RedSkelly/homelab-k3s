@@ -1,28 +1,15 @@
-# Helmfile — Bootstrap and Break-Glass Helm Release Management
+# Helmfile: bootstrap and break-glass Helm release management.
 #
-# ROLE: Helmfile is the BOOTSTRAP and BREAK-GLASS tool for this cluster.
-# Argo CD is the primary GitOps reconciler for day-to-day operations.
+# Argo CD is the reconciler for day-to-day operations. Helmfile covers initial
+# cluster standup (before Argo CD exists), manual sync if Argo CD is down, and
+# testing value changes before they are committed.
 #
-# When to use Helmfile:
-#   1. Initial cluster standup — deploy the platform stack before Argo CD exists
-#   2. Emergency recovery — manually sync releases if Argo CD is down
-#   3. Rapid iteration — test Helm value changes before committing to Git
-#
-# When NOT to use Helmfile:
-#   - Routine deployments — let Argo CD reconcile from Git
-#   - Application rollouts — use Argo CD's progressive delivery features
-#
-# Usage:
-#   helmfile diff         # Preview changes before applying
-#   helmfile sync         # Deploy/update all releases
-#   helmfile status       # Check release status
-#
-# Values files live alongside their component in kubernetes/<layer>/<component>/values.yaml.
-# That file is the single source of truth for whichever reconciler owns the component:
-# Helmfile references it directly (below); a component migrated to Argo CD references the
-# same file by path from its Application (e.g. ingress-nginx). No duplicated copies.
-# Exception: cert-manager's values are trivial chart defaults, inlined in its Application,
-# so it has no values.yaml.
+# Values files live alongside their component in kubernetes/<layer>/<component>/values.yaml
+# and are the single source of truth for whichever reconciler owns the component:
+# Helmfile references them directly (below); a component migrated to Argo CD references
+# the same file by path from its Application (e.g. ingress-nginx). cert-manager is the
+# exception: its values are chart defaults, inlined in its Application, so it has no
+# values.yaml.
 
 ---
 helmDefaults:

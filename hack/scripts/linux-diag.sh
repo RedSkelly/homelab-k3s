@@ -4,9 +4,8 @@
 #
 # OS-level diagnostic for the cluster nodes. Read-only.
 #
-# Loops the nodes over SSH and runs the same set of checks on each, so they can
-# be compared. Drift between nodes that should be identical is usually where the
-# real problem is.
+# Loops the nodes over SSH and runs the same checks on each so they can be
+# compared. Drift between nodes that should be identical is what this surfaces.
 #
 # Usage:
 #   ./linux-diag.sh                # all nodes
@@ -32,12 +31,10 @@ NODES="
 # Run a command on a node over SSH. Everything goes through here.
 #
 # BatchMode stops SSH hanging on a password prompt if the key is missing, which
-# would otherwise stall the whole loop on a node that cannot be reached.
+# would stall the whole loop on an unreachable node.
 #
-# ControlMaster reuses one TCP connection per node for every command that follows,
-# instead of a fresh handshake each time. This script runs roughly thirty commands
-# per node across six nodes, so without it that is nearly two hundred handshakes,
-# and the run takes minutes instead of seconds.
+# ControlMaster reuses one TCP connection per node instead of a fresh handshake
+# per command. This script runs ~30 commands per node across 6 nodes.
 SSH_OPTS="
 -o ConnectTimeout=5
 -o BatchMode=yes
@@ -68,11 +65,9 @@ check_node() {
     echo "uptime:    $(run 'uptime -p')"
     echo "booted:    $(run 'uptime -s')"
 
-    # The running kernel only changes on reboot. The installed kernel changes
-    # whenever unattended-upgrades feels like it. If these differ, the node has a
-    # reboot pending, and on reboot it will come up on the newer one.
-    #
-    # This is the check that catches an involuntary reboot after the fact.
+    # The running kernel only changes on reboot; the installed kernel changes
+    # whenever unattended-upgrades runs. If these differ the node has a reboot
+    # pending and will come up on the newer one.
     RUNNING_KERNEL=$(run 'uname -r')
     NEWEST_KERNEL=$(run 'ls /boot/vmlinuz-* | sed "s|.*/vmlinuz-||" | sort -V | tail -1')
 
@@ -88,17 +83,15 @@ check_node() {
     run 'last -x reboot shutdown | head -8' | sed 's/^/  /'
 
     # An orderly shutdown writes a "shutdown" record before the next "reboot"
-    # record. A power cut writes nothing: the log just stops, and the next thing in
-    # it is the boot that followed. So a reboot with no shutdown line above it is a
-    # node that died hard.
+    # record. A power cut writes nothing, so a reboot with no shutdown line
+    # above it is a node that died hard.
     #
-    # wtmp is the source, not the journal. Reading the tail of the previous boot's
-    # journal and looking for the word "shutdown" is unreliable: it depends on what
-    # the last few log lines happened to say, and it only ever examines one boot
-    # back. Every unclean event before that stays invisible.
+    # wtmp is the source rather than the journal: reading the previous boot's
+    # journal for the word "shutdown" only looks one boot back and depends on
+    # what the last log lines happened to say.
     #
-    # last prints newest first, so reverse it with tac and walk forward through
-    # time. Then each reboot can be judged against whether a shutdown preceded it.
+    # last prints newest first, so reverse it with tac and walk forward, judging
+    # each reboot against whether a shutdown preceded it.
     echo
     echo "unclean shutdowns (a reboot with no shutdown recorded before it):"
 
@@ -118,7 +111,7 @@ check_node() {
         echo "  none"
     else
         echo "$UNCLEAN" | sed 's/^/  /'
-        echo "  these nodes lost power or hung. Check the UPS and the Proxmox host."
+        echo "  this node lost power or hung. Check the UPS and the Proxmox host."
     fi
 
     echo
@@ -126,9 +119,9 @@ check_node() {
     echo "cores: $(run nproc)"
     echo "load:  $(run 'cat /proc/loadavg')"
 
-    # Steal time is CPU the hypervisor took away from this VM to give to someone
-    # else. It is invisible from inside the guest by any other means, and it is
-    # the thing to check when a VM feels slow but its own metrics look fine.
+    # Steal time is CPU the hypervisor took from this VM to give to another. It
+    # is not visible from inside the guest by any other means, so check it when
+    # a VM is slow but its own metrics look normal.
     echo
     echo "cpu time breakdown (cumulative since boot):"
     run "cat /proc/stat | head -1" | awk '{
@@ -146,8 +139,8 @@ check_node() {
     echo "--- Memory ---"
     run 'free -h' | sed 's/^/  /'
 
-    # Swap should be off on every node. On a control plane node it wrecks etcd
-    # latency; on a worker it makes the kubelet's memory accounting a lie.
+    # Swap should be off on every node: on a control plane node it raises etcd
+    # latency, and on a worker it makes the kubelet's memory accounting wrong.
     SWAP_TOTAL=$(run "awk '/SwapTotal/ {print \$2}' /proc/meminfo")
 
     echo
@@ -170,14 +163,14 @@ check_node() {
     echo "--- Disk ---"
     run 'df -h -x tmpfs -x devtmpfs' | sed 's/^/  /'
 
-    # Inodes are a separate pool from disk space: gigabytes can be free and still
-    # no file can be created.
+    # Inodes are a separate pool from disk space: gigabytes can be free and no
+    # file can still be created.
     echo
     echo "inode usage:"
     run 'df -i -x tmpfs -x devtmpfs' | sed 's/^/  /'
 
     # Unbooted kernels accumulate in /boot and eventually fill it, which breaks
-    # apt in confusing ways.
+    # apt.
     KERNEL_COUNT=$(run 'ls /boot/vmlinuz-* | wc -l')
     echo
     echo "installed kernels: $KERNEL_COUNT"
@@ -190,20 +183,19 @@ check_node() {
     echo
     echo "--- Network ---"
 
-    # Drop the veth interfaces: one per pod, created and destroyed constantly, a
-    # busy worker prints twenty. They bury the two addresses that matter under
-    # noise that changes on every run.
+    # Drop the veth interfaces: one per pod, created and destroyed constantly,
+    # and a busy worker prints twenty of them.
     run 'ip -br addr' | grep -vE '^veth|^cni0' | sed 's/^/  /'
 
-    # kube-vip parks the API server VIP on whichever control plane node currently
-    # holds it, as a /32 on top of that node's real address. Unlabelled it just
-    # looks like a mystery extra IP on one node and not the others.
+    # kube-vip parks the API server VIP on whichever control plane node holds it,
+    # as a /32 on top of that node's real address. Labelled here so it is not
+    # read as an unexplained extra IP on one node.
     if run 'ip -br addr' | grep -q '10.0.10.49/32'; then
         echo
         echo "  this node currently holds the kube-vip API VIP (10.0.10.49)"
     fi
 
-    # resolv.conf shows what DNS is configured, not whether it works. Test an
+    # resolv.conf shows what DNS is configured, not whether it works, so run an
     # actual lookup.
     echo
     echo "can this node resolve DNS?"
@@ -222,15 +214,18 @@ check_node() {
     fi
 
     echo
-    echo "--- Storage network (VLAN 20) ---"
+    echo "--- VLAN 20 segment (provisioned, not used by Longhorn) ---"
 
-    # Longhorn replicates over VLAN 20, deliberately not routed through OPNsense -
-    # east-west only across the CRS305. That isolation means a fault here is
-    # invisible elsewhere: nothing else uses the path, so nothing else notices when
-    # it breaks - rebuilds just slow or stall with no obvious cause.
+    # VLAN 20 is east-west only across the CRS305, not routed through OPNsense.
     #
-    # Only the workers hold replicas, so only they replicate. Control plane nodes
-    # carry VLAN 20 addresses that nothing uses; testing them proves nothing.
+    # Longhorn does NOT replicate over it: `storage-network` is unset, so
+    # replication rides VLAN 10 over the flannel VXLAN overlay. Measured
+    # 2026-07-14; see docs/benchmarks/storage-replication/2026-07-14-results.md.
+    # These checks therefore validate the segment itself, not any live traffic
+    # path, and a failure here does not currently affect replication.
+    #
+    # Only the workers would carry replication if it moved onto VLAN 20. Control
+    # plane nodes carry VLAN 20 addresses that nothing uses.
     #
     # Each node's VLAN 20 address mirrors its VLAN 10 last octet: 10.0.10.60 ->
     # 10.0.20.60.
@@ -245,18 +240,17 @@ check_node() {
     done
 
     if [ "$IS_WORKER" = "no" ]; then
-        echo "  control plane node, holds no Longhorn replicas - nothing replicates here"
+        echo "  control plane node, holds no Longhorn replicas"
     else
         STORAGE_LINE=$(run "ip -br addr | grep $STORAGE_IP")
 
         if [ -z "$STORAGE_LINE" ]; then
-            echo "  $STORAGE_IP is NOT configured - replication cannot use VLAN 20"
+            echo "  $STORAGE_IP is NOT configured on this worker"
         else
             echo "  $STORAGE_LINE"
 
-            # Longhorn keeps one replica of every volume on each worker, so every
-            # worker has to reach every other worker. One broken link stops every
-            # rebuild that involves the node on either end of it.
+            # If replication ever moves onto VLAN 20, every worker has to reach
+            # every other worker, since each holds one replica of every volume.
             echo
             echo "  can this worker reach the other workers on VLAN 20?"
             for PEER_OCTET in $WORKERS; do
@@ -266,7 +260,7 @@ check_node() {
                 if run "ping -c1 -W2 $PEER" >/dev/null; then
                     echo "    $PEER: yes"
                 else
-                    echo "    $PEER: NO - replication to that worker is broken"
+                    echo "    $PEER: NO - this leg of the VLAN 20 segment is down"
                 fi
             done
 
@@ -276,12 +270,10 @@ check_node() {
                 echo
                 echo "  interface $STORAGE_IFACE:"
 
-                # Jumbo frames on the replication path, set in three places: the
-                # CRS305 ports, the Proxmox bridge, and the guest interface. Set
-                # some and not others and nothing errors: the path silently
-                # fragments, throughput collapses, and the only symptom is slower
-                # rebuilds. So assert the expected value rather than printing
-                # whatever is there - a number with no expectation means nothing.
+                # Jumbo frames are set in three places: the CRS305 ports, the
+                # Proxmox bridge, and the guest interface. If they disagree
+                # nothing errors; the path fragments and throughput drops. Assert
+                # the expected value rather than printing whatever is there.
                 EXPECTED_MTU=9000
 
                 MTU=$(run "ip -o link show $STORAGE_IFACE" \
@@ -293,7 +285,7 @@ check_node() {
                     echo "    MTU: $MTU - expected $EXPECTED_MTU, jumbo frames are not set"
                 fi
 
-                # Errors and drops here surface as slow rebuilds and nowhere else.
+                # Errors and drops here surface as slow rebuilds.
                 run "ip -s link show $STORAGE_IFACE" \
                     | awk '/RX:|TX:/ {
                         direction = $1
@@ -318,13 +310,13 @@ check_node() {
         echo "$FAILED_UNITS" | sed 's/^/  /'
     fi
 
-    # K3s installs a different unit depending on the role. Servers get k3s.service,
-    # agents get k3s-agent.service. There is no single name that covers both.
+    # K3s installs k3s.service on servers and k3s-agent.service on agents; no
+    # single name covers both.
     #
-    # Ask which unit exists first, then check that one. Chaining the two checks
-    # with || does not work: systemctl is-active prints "inactive" to stdout, not
-    # stderr, so the first check's output gets captured alongside the second, and
-    # every worker reports "inactive" followed by "active".
+    # Check which unit exists first. Chaining the two with || does not work:
+    # systemctl is-active prints "inactive" to stdout, not stderr, so the first
+    # check's output is captured alongside the second and every worker reports
+    # "inactive" followed by "active".
     echo
     if run 'systemctl cat k3s.service' >/dev/null 2>&1; then
         K3S_UNIT=k3s
@@ -337,14 +329,11 @@ check_node() {
     echo
     echo "--- Logs ---"
 
-    # Two of these fire on every boot of every node and always will - artifacts of
-    # the virtual hardware Proxmox presents, not faults:
+    # Two of these fire on every boot of every node. They are artifacts of the
+    # virtual hardware Proxmox presents, not faults, so they are filtered out:
     #
     #   shpchp          PCI hotplug driver failing on emulated slots
     #   snd_hda_intel   an audio device with no codec, on a server with no sound
-    #
-    # Left in, they print the same five harmless lines every run and train the
-    # reader to skip the section. Filter them so what remains is worth reading.
     echo "kernel errors this boot:"
     KERNEL_ERRORS=$(run 'journalctl -k -p err -b --no-pager' \
         | grep -viE 'shpchp|snd_hda_intel' \
@@ -368,8 +357,8 @@ check_node() {
     echo
     echo "--- Updates ---"
 
-    # The setting that matters. A node that reboots itself outside the drain
-    # sequence damages etcd and Longhorn replicas on the way out.
+    # A node that reboots itself outside the drain sequence leaves etcd and
+    # Longhorn replicas to recover unassisted.
     AUTO_REBOOT=$(run 'grep -rh "Automatic-Reboot" /etc/apt/apt.conf.d/ 2>/dev/null | grep -v "^//"')
 
     if [ -z "$AUTO_REBOOT" ]; then
@@ -386,16 +375,14 @@ check_node() {
     echo
     echo "--- Time ---"
 
-    # Clock skew breaks etcd and TLS in ways that are genuinely hard to diagnose.
-    # One line to check.
+    # Clock skew breaks etcd and TLS.
     echo "NTP synchronized: $(run 'timedatectl show -p NTPSynchronized --value')"
 }
 
 
-# These nodes are built from the same image and should look the same. Where they
-# differ is where the problem is - a comparison across nodes, not something
-# visible in any single node's output. Collect the values that should match into
-# one table at the end, where a difference is visible.
+# These nodes are built from the same image, so a difference between them is a
+# comparison result, not something visible in any single node's output. Collect
+# the values that should match into one table at the end.
 summarise() {
     printf "%-12s %-20s %-6s %-6s %-12s %-6s %s\n" \
         "NODE" "KERNEL" "SWAP" "MTU" "K3S" "PKGS" "UNCLEAN"
@@ -465,8 +452,8 @@ echo "================================================================"
 echo "  Summary"
 echo "================================================================"
 echo
-echo "These nodes are built the same and should read the same. A value that"
-echo "differs from its neighbours is where to look first."
+echo "These nodes are built the same and should read the same. Check any value"
+echo "that differs from its neighbours."
 echo
 summarise
 echo

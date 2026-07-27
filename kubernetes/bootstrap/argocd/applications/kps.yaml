@@ -1,41 +1,31 @@
-# Argo CD Application -- kube-prometheus-stack (kps)
+# Argo CD Application: kube-prometheus-stack (kps)
 #
-# Final Helmfile-to-Argo CD migration (after cert-manager and ingress-nginx).
-# Mirrors the ingress-nginx multi-source pattern: the upstream chart plus this
-# Git repo exposed as the `$values` ref, so the hand-authored values file is
-# referenced BY PATH (single source of truth), not inlined.
+# Migrated from Helmfile (2026-07-26). Same multi-source pattern as
+# ingress-nginx: the upstream chart plus this repo exposed as the `$values` ref.
 #
-# kps-specific details:
+# Three settings that must not be changed without reading why first:
 #
-#   releaseName: kps -- CRITICAL. Every rendered resource name derives from the
-#     Helm release name (kps-grafana, prometheus-kps-kube-prometheus-stack-*,
-#     etc.). The existing release is named `kps`, so this is pinned explicitly:
-#     a mismatch would make Argo CD create a parallel set of resources instead
-#     of adopting the running ones. (It also matches the Application name, but
-#     pinning removes all ambiguity.)
+#   releaseName: kps
+#     Every rendered resource name derives from the Helm release name
+#     (kps-grafana, prometheus-kps-kube-prometheus-stack-*). The running release
+#     is named `kps`; a mismatch makes Argo CD create a parallel set of resources
+#     instead of adopting the running ones.
 #
-#   Encrypted overlay (NO secrets:// prefix -- deliberate) -- the Alertmanager
-#     Slack webhook lives in the SOPS/age-encrypted secrets.values.yaml (overlays
-#     alertmanager.config.global.slack_api_url). helm-secrets does NOT support the
-#     secrets:// scheme in an Argo CD multi-source app: Argo only expands the
-#     $values ref when it is the FIRST token of the path, which a secrets://
-#     prefix breaks (the ref resolves to empty -> "File does not exist"). The
-#     supported path is helm-secrets WRAPPER MODE: the repo-server sets
-#     HELM_SECRETS_WRAPPER_ENABLED=true and HELM_SECRETS_VALUES_ALLOW_ABSOLUTE_PATH=true
-#     (plus HELM_SECRETS_BACKEND=sops and SOPS_AGE_KEY_FILE mounted from the
-#     sops-age secret), so the wrapper transparently decrypts any SOPS file passed
-#     as a plain --values. The plaintext webhook never touches Git or disk.
-#     Listed AFTER values.yaml so the overlay wins, matching the old Helmfile
-#     values:/secrets: ordering. Do NOT re-add secrets:// here -- it re-breaks
-#     manifest generation. (Ref: helm-secrets wiki, ArgoCD-Integration.)
+#   No secrets:// prefix on the encrypted overlay
+#     Argo only expands the $values ref when it is the first token of the path,
+#     so a secrets:// prefix resolves the ref to empty ("File does not exist").
+#     Decryption happens instead via helm-secrets wrapper mode on the repo-server
+#     (HELM_SECRETS_WRAPPER_ENABLED, see bootstrap/argocd/values.yaml), which
+#     decrypts any SOPS file passed as a plain --values. Re-adding secrets:// here
+#     breaks manifest generation. Ref: helm-secrets wiki, ArgoCD-Integration.
 #
-#   ServerSideApply=true -- MANDATORY. kps ships large CRDs (Prometheus,
-#     Alertmanager, ServiceMonitor, PodMonitor, PrometheusRule, ...); SSA merges
-#     field ownership with Helm's instead of hitting the client-side annotation
-#     size limit or fighting over CRD ownership.
+#   ServerSideApply=true
+#     kps ships large CRDs (Prometheus, Alertmanager, ServiceMonitor, PodMonitor,
+#     PrometheusRule). SSA merges field ownership with Helm's instead of hitting
+#     the client-side annotation size limit or contending over CRD ownership.
 #
-# syncPolicy is manual (no automated sync/prune/selfHeal), mirroring the prior
-# two migrations, so the first reconcile and every later change is human-driven.
+# syncPolicy is manual (no automated sync/prune/selfHeal): every reconcile is
+# human-triggered.
 
 apiVersion: argoproj.io/v1alpha1
 kind: Application
@@ -57,9 +47,8 @@ spec:
         valueFiles:
           # Resolved from the `$values` ref source below (repo root).
           - $values/kubernetes/monitoring/kube-prometheus-stack/values.yaml
-          # SOPS/age-encrypted overlay. No secrets:// prefix on purpose: the
-          # $values ref must be the first token, so decryption happens via
-          # helm-secrets wrapper mode on the repo-server (see header comment).
+          # SOPS/age-encrypted overlay, listed after values.yaml so it wins.
+          # No secrets:// prefix: see the header.
           - $values/kubernetes/monitoring/kube-prometheus-stack/secrets.values.yaml
     # This Git repo, referenced only to supply the values files above.
     # `ref` sources render nothing themselves; they just expose the tree.

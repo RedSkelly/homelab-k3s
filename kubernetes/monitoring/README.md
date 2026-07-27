@@ -12,5 +12,4 @@ Metrics, logging, and alerting for the cluster and workloads.
 ## Design notes
 
 - kube-prometheus-stack provides Prometheus, Grafana, and Alertmanager in a single Helm release
-- Loki completes the observability picture — logs alongside metrics in Grafana
-- Together these demonstrate a full observability stack for portfolio purposes
+- Loki adds logs alongside metrics in Grafana

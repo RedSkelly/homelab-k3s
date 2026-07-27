@@ -1,6 +1,6 @@
 # Benchmarks
 
-Baseline performance measurements for the homelab platform. Re-run after significant infrastructure changes to detect regressions.
+Baseline performance measurements for the homelab platform. Re-run after infrastructure changes to detect regressions.
 
 ## Index
 
@@ -21,7 +21,7 @@ Baseline performance measurements for the homelab platform. Re-run after signifi
 
 Each benchmark directory contains:
 
-- `prompt.md` — the Claude Code prompt used to run the benchmark
-- `YYYY-MM-DD-results.md` — results from each run, dated for comparison over time
+- `prompt.md`: the Claude Code prompt used to run the benchmark
+- `YYYY-MM-DD-results.md`: results from each run, dated for comparison over time
 
 Keep previous results files when re-running so regressions are visible in git history.

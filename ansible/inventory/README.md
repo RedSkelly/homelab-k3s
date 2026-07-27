@@ -2,9 +2,9 @@
 
 ## What belongs here
 
-- `hosts.yml` — inventory file defining all 6 K3s nodes with connection details
-- `group_vars/` — variables scoped to node groups (all, control_plane, workers)
-- `host_vars/` — variables scoped to individual nodes (if needed)
+- `hosts.yml`: inventory file defining all 6 K3s nodes with connection details
+- `group_vars/`: variables scoped to node groups (all, control_plane, workers)
+- `host_vars/`: variables scoped to individual nodes (if needed)
 
 ## Groups
 

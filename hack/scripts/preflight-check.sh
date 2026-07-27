@@ -19,8 +19,8 @@ SNAPSHOT_MAX_AGE_HOURS=24
 
 TARGET_NODE="${1:-}"
 
-# Only emit colour when writing to a terminal. Redirected to a file, the escape
-# codes are printed literally and make the log harder to read than no colour.
+# Only emit colour when stdout is a terminal; redirected to a file, the escape
+# codes print literally.
 if [ -t 1 ]; then
     RED=$'\033[0;31m'
     GREEN=$'\033[0;32m'
@@ -58,7 +58,7 @@ else
 fi
 
 # A node left cordoned from an earlier operation is invisible to Longhorn, which
-# then never rebuilds a replica onto it - how a volume ends up stuck degraded.
+# then never rebuilds a replica onto it, leaving the volume degraded.
 CORDONED=$(kubectl get nodes --no-headers | grep SchedulingDisabled | awk '{print $1}')
 if [ -z "$CORDONED" ]; then
     ok "no cordoned nodes"
@@ -98,7 +98,7 @@ fi
 echo
 echo "=== etcd snapshot ==="
 
-# This is the rollback. Confirm it exists before it is needed, not after.
+# The snapshot is the rollback path. Confirm it exists before it is needed.
 SNAPSHOT_DIR=/var/lib/rancher/k3s/server/db/snapshots
 NEWEST=$(ssh -o ConnectTimeout=5 "$SSH_USER@$CP_NODE" "sudo ls -t $SNAPSHOT_DIR 2>/dev/null | head -1")
 
@@ -120,22 +120,19 @@ fi
 echo
 echo "=== Longhorn volumes ==="
 
-# THE CHECK THAT MATTERS MOST.
-#
 # A volume below its desired replica count has less redundancy than it should.
 # "Fewer replicas than wanted" has two causes, and only one should block:
 #
-#   REBUILDING  Longhorn is copying data onto a new replica now - working, not
-#               stuck. Happens after every drain, reboot, and replica move, and
-#               finishes on its own. Wait for it.
+#   REBUILDING  Longhorn is copying data onto a new replica. Happens after every
+#               drain, reboot, and replica move, and finishes on its own.
 #
 #   STUCK       The replica is missing and nothing is bringing it back, usually
-#               no node has room or a node is cordoned. Does not self-resolve.
+#               because no node has room or a node is cordoned. Does not
+#               self-resolve.
 #
-# The volume's robustness field says "degraded" for both, so it is not enough on
-# its own; look at the replica states instead. Blocking on a rebuild would fail
-# after every routine drain, and a gate that cries wolf goes unread - so warn on
-# a rebuild and block only when nothing is rebuilding.
+# The volume's robustness field says "degraded" for both, so read the replica
+# states instead. Blocking on a rebuild would fail after every routine drain, so
+# warn on a rebuild and block only when nothing is rebuilding.
 
 REPLICA_STATES=$(kubectl -n longhorn-system get replicas \
     -o custom-columns=VOLUME:.spec.volumeName,STATE:.status.currentState,NODE:.spec.nodeID \
@@ -156,8 +153,8 @@ for VOLUME in $(kubectl -n longhorn-system get volumes -o name | cut -d/ -f2); d
         ok "volume $VOLUME has $RUNNING/$WANTED replicas"
 
     elif [ "$REBUILDING" -gt 0 ]; then
-        # Longhorn is already fixing this - not a fault. Do not power down
-        # mid-copy; wait a few minutes and re-run.
+        # Longhorn is already fixing this. Do not power down mid-copy; wait a
+        # few minutes and re-run.
         warn "volume $VOLUME has $RUNNING/$WANTED replicas, $REBUILDING rebuilding - wait, then re-run"
         echo "$REPLICA_STATES" | awk -v vol="$VOLUME" '$1 == vol {print "          " $3 " " $2}'
 
@@ -170,8 +167,8 @@ for VOLUME in $(kubectl -n longhorn-system get volumes -o name | cut -d/ -f2); d
     fi
 done
 
-# Longhorn silently refuses to place replicas on a node with scheduling disabled,
-# and will keep refusing forever.
+# Longhorn silently refuses to place replicas on a node with scheduling
+# disabled, and will keep refusing until it is re-enabled.
 for NODE in $(kubectl -n longhorn-system get nodes.longhorn.io -o name | cut -d/ -f2); do
     ALLOWED=$(kubectl -n longhorn-system get nodes.longhorn.io "$NODE" \
         -o jsonpath='{.spec.allowScheduling}')
@@ -182,20 +179,18 @@ done
 echo
 echo "=== PodDisruptionBudgets ==="
 
-# A PDB showing 0 allowed disruptions blocks eviction, for two very different
-# reasons that are dangerous to confuse:
+# A PDB showing 0 allowed disruptions blocks eviction for two reasons that must
+# not be confused:
 #
-#   WAIT   Longhorn creates the instance-manager and csi-* PDBs itself and
-#          removes them once volumes detach. They correctly show 0 allowed while
-#          volumes are attached. Force-deleting these pods rips volumes out from
-#          under running workloads. Wait them out.
+#   WAIT   Longhorn's own instance-manager and csi-* PDBs, which show 0 allowed
+#          while volumes are attached and clear once they detach. Force-deleting
+#          those pods rips volumes out from under running workloads.
 #
 #   FAIL   minAvailable >= the number of pods that exist. Nothing satisfies it,
 #          so waiting never helps and the drain retries forever. Fix the PDB.
 #
-# The arithmetic cannot tell them apart - both can be minAvailable=1 against a
-# single pod. What separates them is whether anything will ever clear the
-# condition, which comes down to who owns the PDB. So match Longhorn's own
+# The numbers cannot tell them apart, since both can read minAvailable=1 against
+# a single pod. What separates them is who owns the PDB, so match Longhorn's
 # dynamically-managed PDBs by name and treat those as transient.
 
 is_longhorn_managed() {
@@ -242,7 +237,7 @@ echo "=== Workloads ==="
 
 # Do not stack a deliberate disruption on top of an unintended one.
 #
-# Ask for the phase by name rather than parsing the default table: a restarted
+# Request the phase by name rather than parsing the default table: a restarted
 # pod shows RESTARTS as "10 (2d1h ago)", shifting every column after it, and
 # grepping the whole line would match the pod NAME as well as the STATUS.
 #
@@ -264,7 +259,7 @@ if [ -n "$TARGET_NODE" ]; then
     echo
     echo "=== Cost of draining $TARGET_NODE ==="
 
-    # DaemonSet pods do not relocate, drain skips them with --ignore-daemonsets.
+    # DaemonSet pods do not relocate; drain skips them with --ignore-daemonsets.
     # Everything else has to find room on the remaining nodes.
     EVICTABLE=$(kubectl get pods -A --field-selector "spec.nodeName=$TARGET_NODE" \
         -o custom-columns=OWNER:.metadata.ownerReferences[0].kind --no-headers \
@@ -281,10 +276,9 @@ if [ -n "$TARGET_NODE" ]; then
         echo "$ATTACHED" | sed 's/^/          /'
     fi
 
-    # Volumes are not spread evenly across the workers. They attach wherever the
-    # consuming pod is scheduled, so one node can end up holding every volume.
-    # Draining it detaches them all at once, each to detach, reattach elsewhere,
-    # and settle - worth seeing beforehand rather than mid-drain.
+    # Volumes attach wherever the consuming pod is scheduled, so one node can
+    # end up holding every volume. Draining it detaches them all at once, each
+    # to reattach elsewhere and settle.
     TOTAL_VOLUMES=$(kubectl -n longhorn-system get volumes --no-headers | wc -l | tr -d ' ')
     HERE=$(echo "$ATTACHED" | grep -c .)
 

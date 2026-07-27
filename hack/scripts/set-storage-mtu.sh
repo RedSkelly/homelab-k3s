@@ -4,38 +4,34 @@
 #
 # Sets MTU 9000 on the VLAN 20 interface of the three worker nodes.
 #
-# Does not currently affect Longhorn. VLAN 20 was provisioned for storage
-# replication, but Longhorn's `storage-network` is unset, so replication rides
-# VLAN 10 (enp6s18) over the flannel VXLAN overlay. Measured 2026-07-14: during a
-# 1 GiB write a remote replica received 659 MB on VLAN 10 and 0 on VLAN 20. See
+# This does not affect Longhorn today: `storage-network` is unset, so replication
+# rides VLAN 10 over the flannel VXLAN overlay. Measured 2026-07-14; see
 # docs/benchmarks/storage-replication/2026-07-14-results.md. Kept because --check
 # and the jumbo-frame verification validate the VLAN 20 path on their own, and
-# because it becomes relevant once VLAN 20 is wired up (Longhorn `storage-network`
+# because it becomes relevant if VLAN 20 is wired up (Longhorn `storage-network`
 # plus a Multus NetworkAttachmentDefinition).
 #
-# MTU 9000 is delivered from above: the CRS305 (ports + bridge) and the Proxmox
-# hosts' /etc/network/interfaces (ifupdown, where the vmbr bridge MTU lives).
-# Guests inherit it from the hypervisor NIC. The interface therefore already reads
-# 9000, so the idempotency check short-circuits and the netplan write never runs -
-# correct, but it means this script does not hold the MTU, and guests have no
-# backstop if the Proxmox side is reset or a VM rebuilt.
+# MTU 9000 currently arrives from above (CRS305 ports + bridge, and the Proxmox
+# hosts' /etc/network/interfaces), and guests inherit it from the hypervisor NIC.
+# The interface therefore already reads 9000, the idempotency check
+# short-circuits, and the netplan write never runs. This script does not hold the
+# MTU, so guests have no backstop if the Proxmox side is reset or a VM rebuilt.
 #
-# MTU must agree across every hop. Three layers:
+# MTU must agree across every hop:
 #
 #   1. CRS305 switch ports      MikroTik CLI, not this script
 #   2. Proxmox bridge / VLAN    on the hosts, not this script
 #   3. Guest interface          this script
 #
-# This script does layer 3 only. Run before the other two and the workers emit
-# 9000-byte frames onto a path that cannot carry them. The failure mode warrants
-# care: nothing errors or logs; oversized frames are silently dropped or
-# fragmented, TCP backs off, and the only symptom is slower Longhorn rebuilds. A
-# half-applied MTU change is worse than none because it looks fine. So: switch
-# first, then hosts, then this, verifying each layer before the next.
+# This script does layer 3 only. Running it before the other two makes the
+# workers emit 9000-byte frames onto a path that cannot carry them: nothing
+# errors, the frames are dropped or fragmented, TCP backs off, and the only
+# symptom is slower Longhorn rebuilds. Set the switch first, then the hosts,
+# then this, verifying each layer before the next.
 #
-# Only the workers hold Longhorn replicas, so only they would carry replication if
-# it moved onto VLAN 20. The control plane nodes have VLAN 20 addresses that
-# nothing uses, and are left alone here.
+# Only the workers hold Longhorn replicas, so only they would carry replication
+# if it moved onto VLAN 20. The control plane nodes have VLAN 20 addresses that
+# nothing uses and are left alone.
 #
 # Idempotent. Safe to run repeatedly.
 #
@@ -144,9 +140,9 @@ for NODE in $WORKERS; do
         continue
     fi
 
-    # Set at runtime first: effective immediately, survives until reboot, enough
-    # to test the path before persisting. If the switch is not carrying jumbo
-    # frames, the test below fails with nothing written to disk.
+    # Set at runtime first: effective immediately and survives until reboot,
+    # which is enough to test the path before persisting. If the switch is not
+    # carrying jumbo frames, the test below fails with nothing written to disk.
     run "sudo ip link set $IFACE mtu $TARGET_MTU"
 
     AFTER=$(current_mtu)
@@ -158,16 +154,16 @@ for NODE in $WORKERS; do
     fi
 
     # Persist it: netplan owns interface config on Ubuntu, and a runtime ip link
-    # change does not survive reboot. A separate file, not an edit to the
-    # installer's, keeps the change isolated and obvious.
+    # change does not survive reboot. Written as a separate file rather than an
+    # edit to the installer's, to keep the change isolated.
     run "sudo tee /etc/netplan/99-storage-mtu.yaml >/dev/null <<EOF
 # Managed by set-storage-mtu.sh
 #
 # Jumbo frames on the VLAN 20 segment. Must match the CRS305 port MTU and the
-# Proxmox bridge MTU. If they disagree, throughput collapses silently.
+# Proxmox bridge MTU; if they disagree, throughput drops with no error.
 #
-# NB: VLAN 20 is not currently Longhorn's replication path — replication runs on
-# VLAN 10. This file tunes the segment for if/when that changes.
+# VLAN 20 is not currently Longhorn's replication path: replication runs on
+# VLAN 10. This file tunes the segment for if that changes.
 network:
   version: 2
   ethernets:
@@ -182,11 +178,10 @@ EOF"
 done
 
 
-# Setting the interface MTU only says what the interface will send, not whether
-# the path can carry it. Test it: ping with a payload that fills a jumbo frame and
-# forbid fragmentation. If any hop is still at 1500 the packet is too big to
-# forward, cannot be split, and is dropped. A passing ping is the only evidence
-# all three layers agree.
+# The interface MTU says what the interface will send, not whether the path can
+# carry it. Ping with a payload that fills a jumbo frame and forbid
+# fragmentation: if any hop is still at 1500 the packet cannot be forwarded or
+# split, and is dropped. A passing ping is the evidence all three layers agree.
 #
 # 8972 = 9000 minus 20 bytes IP header and 8 bytes ICMP header.
 echo
@@ -232,6 +227,6 @@ fi
 echo "$FAILED path(s) failed."
 echo
 echo "The guest interfaces are set, but something upstream is not. Check the"
-echo "CRS305 port MTU and the Proxmox bridge MTU. Until those match, replication"
-echo "is slower than before, not faster."
+echo "CRS305 port MTU and the Proxmox bridge MTU. Until those match, throughput"
+echo "on this path is lower than before the change."
 exit 1

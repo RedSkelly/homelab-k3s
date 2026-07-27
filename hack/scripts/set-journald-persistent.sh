@@ -5,14 +5,13 @@
 # Makes the systemd journal survive a reboot on every cluster node.
 #
 # Under Ubuntu's default Storage=auto, the journal persists only if
-# /var/log/journal/ already exists, otherwise it lives in tmpfs and is erased on
-# every boot. That directory exists on these nodes today, so persistence is
-# accidental: nothing enforces it, and any rebuild that misses the directory
-# reverts to a volatile journal.
+# /var/log/journal/ already exists; otherwise it lives in tmpfs and is erased on
+# every boot. That directory exists on these nodes today, but nothing enforces
+# it, so a rebuild that misses it reverts to a volatile journal.
 #
-# Persistence matters because the question is usually about the previous boot -
-# why the node rebooted, whether it shut down cleanly. A volatile journal loses
-# that record in the very reboot being investigated.
+# The question after an incident is usually about the previous boot: why the node
+# rebooted, whether it shut down cleanly. A volatile journal loses that record in
+# the reboot being investigated.
 #
 # Also caps the journal at MAX_USE; journald's default ceiling is 10% of the
 # filesystem, several gigabytes here.
@@ -63,16 +62,16 @@ for NODE in $NODES; do
         continue
     fi
 
-    # Drop-in, not an edit to journald.conf: the packaged file is replaced on
-    # upgrade, a drop-in survives and keeps the change in one obvious file.
+    # Drop-in rather than an edit to journald.conf: the packaged file is replaced
+    # on upgrade, a drop-in survives.
     run "sudo mkdir -p /etc/systemd/journald.conf.d"
 
     run "sudo tee /etc/systemd/journald.conf.d/persistent.conf >/dev/null <<'EOF'
 # Managed by set-journald-persistent.sh
 #
 # Storage=persistent writes the journal to /var/log/journal, creating the
-# directory if absent rather than depending on it. Without this the journal, and
-# the record of why the node rebooted, is lost on reboot.
+# directory if absent rather than depending on it. Without this the journal is
+# lost on reboot.
 [Journal]
 Storage=persistent
 SystemMaxUse=$MAX_USE
@@ -80,9 +79,9 @@ EOF"
 
     run "sudo systemctl restart systemd-journald"
 
-    # Verify by where the journal actually lives, not what the config says: they
-    # agree only if the restart took effect. Persistent is a directory under
-    # /var/log/journal; volatile lives under /run/log/journal and is gone next boot.
+    # Verify by where the journal lives, not what the config says: they agree
+    # only if the restart took effect. Persistent is a directory under
+    # /var/log/journal; volatile is under /run/log/journal and is gone next boot.
     if run "sudo test -d /var/log/journal"; then
         SIZE=$(run "sudo du -sh /var/log/journal | cut -f1")
         BOOTS=$(run "sudo journalctl --list-boots --no-pager | wc -l")
@@ -99,6 +98,6 @@ echo
 echo "================================================================"
 echo "Done."
 echo
-echo "Boots retained should be greater than 1. If it is 1, this node has no"
-echo "record of any earlier boot, and it will build one from here on."
+echo "Boots retained should be greater than 1. A value of 1 means this node has"
+echo "no record of any earlier boot, and will build one from here on."
 echo "================================================================"

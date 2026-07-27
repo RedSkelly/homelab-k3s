@@ -1,4 +1,4 @@
-# Ansible — Node Configuration
+# Ansible: Node Configuration
 
 Configures Ubuntu 24.04 VMs after Terraform provisioning: OS hardening, package installation, K3s bootstrap, and ongoing node maintenance.
 
@@ -21,6 +21,6 @@ ansible/
 
 - SSH user is `k3s` with passwordless sudo on all nodes
 - SSH key pushed from both management workstations
-- All playbooks must be idempotent — safe to run repeatedly
+- All playbooks must be idempotent, safe to run repeatedly
 - K3s install should use the official install script with config flags matching the current cluster (embedded etcd HA, kube-vip interface, etc.)
 - Swap must be disabled on all nodes (etcd latency on CP, consistency on workers)

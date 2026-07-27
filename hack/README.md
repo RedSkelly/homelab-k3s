@@ -1,6 +1,6 @@
-# Hack — Utility Scripts
+# Hack: Utility Scripts
 
-Operational scripts and helpers that don't fit neatly into Terraform, Ansible, or Kubernetes manifests. The scripts live in `hack/scripts/`.
+Operational scripts and helpers that do not fit into Terraform, Ansible, or Kubernetes manifests. The scripts live in `hack/scripts/`.
 
 ## What's here
 
@@ -16,7 +16,7 @@ Operational scripts and helpers that don't fit neatly into Terraform, Ansible, o
 
 ## Planned
 
-- `kubeconfig-fix.sh` — rewrite the kube-vip VIP in kubeconfig after a K3s restart resets it to `127.0.0.1` (see CLAUDE.md). Not yet written; the fix is currently a manual `sed`.
+- `kubeconfig-fix.sh`: rewrite the kube-vip VIP in kubeconfig after a K3s restart resets it to `127.0.0.1` (see CLAUDE.md). Not yet written; the fix is currently a manual `sed`.
 
 ## Design notes
 

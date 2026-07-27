@@ -1,6 +1,6 @@
 # Applications
 
-User-facing workloads deployed via the full GitOps pipeline. These represent the "top of the stack" — everything in `core/`, `monitoring/`, and `security/` exists to support these.
+User-facing workloads deployed via the full GitOps pipeline. Everything in `core/`, `monitoring/`, and `security/` exists to support these.
 
 ## What belongs here
 

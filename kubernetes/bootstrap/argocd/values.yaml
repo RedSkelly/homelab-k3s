@@ -1,4 +1,4 @@
-# Argo CD Values -- homelab-k3s
+# Argo CD values: homelab-k3s
 # Non-HA deployment with helm-secrets/SOPS/age integration on the repo-server.
 # TLS terminates at ingress-nginx; Argo CD server runs in insecure (HTTP) mode.
 

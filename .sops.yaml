@@ -1,12 +1,7 @@
 # SOPS configuration for encrypting secrets in Git.
 #
-# All files matching the creation_rules patterns below are encrypted with age.
-# Encrypted files can be committed safely; decrypted files (*.dec) are gitignored.
-#
-# Usage:
-#   Encrypt:  sops --encrypt --in-place secrets.<name>.yaml
-#   Decrypt:  sops --decrypt secrets.<name>.yaml
-#   Edit:     sops secrets.<name>.yaml
+# Files matching the creation_rules patterns below are encrypted with age.
+# Encrypted files can be committed; decrypted files (*.dec) are gitignored.
 #
 # Key location: ~/.config/sops/age/keys.txt (must exist on each management workstation)
 

@@ -31,14 +31,13 @@ charts/
 .DS_Store
 Thumbs.db
 
-# Secrets — never commit unencrypted
+# Secrets: never commit unencrypted
 *.key
 *.pem
 
-# Script output — regenerate with hack/scripts/*, never commit.
-# These are dated state dumps, not intent: they describe a cluster that has
-# already changed. Ignored by directory rather than by content, because the diag
-# scripts keep growing and one future line dumping a node-token or kubeconfig
-# would otherwise land in permanent history.
+# Script output: regenerate with hack/scripts/*, never commit.
+# Dated state dumps, not intent. Ignored by directory rather than by content, so
+# that a future diag line dumping a node-token or kubeconfig cannot land in
+# permanent history.
 hack/logs/
 hack/scripts/tailscale-subnet-router-prompt-v2.md
