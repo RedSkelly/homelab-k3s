@@ -57,19 +57,6 @@ Version = the running app version; Helm chart version noted in the Install Metho
 | kube-prometheus-stack | v0.88.0 | Argo CD (chart 81.0.0) | App ver = prometheus-operator; multi-source values + SOPS overlay; cert-manager-issued admission-webhook cert |
 | Argo CD               | v3.3.8  | Helm (chart 9.5.9)     | Non-HA; SOPS+age on repo-server; bootstrap only |
 
-## Repo Structure
-
-```
-kubernetes/    # All cluster manifests: apps/, bootstrap/argocd/, core/, monitoring/, security/
-ansible/       # Node config: swap, kernel, k3s, sudoers, ssh (planned)
-terraform/     # Proxmox VM lifecycle, bpg/proxmox (planned)
-docs/          # Runbooks, architecture decisions, benchmarks
-hack/          # Scripts and utilities
-helmfile.yaml  # Bootstrap/break-glass Helm (now only argocd)
-```
-
-Workload resources (ingress, PDBs, ServiceMonitors, NetworkPolicies) co-locate with their workload directory, not in central directories. Cluster-scoped resources that span workloads (PriorityClasses) live in `policies/`.
-
 ## Management Hosts
 
 - Two workstations (PC + Mac) reach the cluster over two independent, additive overlays: OPNsense WireGuard (works when the client can reach the OPNsense WAN) and the Tailscale subnet router (works from anywhere, including CGNAT LTE). WireGuard is unchanged.
@@ -92,15 +79,13 @@ Workload resources (ingress, PDBs, ServiceMonitors, NetworkPolicies) co-locate w
 | Dependency updates | Renovate                      | Automate PR-based updates        | Planned        |
 | Git hygiene        | Pre-commit                    | Linting, validation on commit    | Planned        |
 
-**Current state:** No Terraform or Ansible exists yet. Provisioning was done manually via SSH/shell scripts. Longhorn and MetalLB installed via kubectl manifest. Helmfile now manages only `argocd` (bootstrap/break-glass); cert-manager (2026-04-29), ingress-nginx (2026-07-25), and kps (2026-07-26) are all migrated to Argo CD. cert-manager is single-source with values inlined as `valuesObject` (they are chart defaults); ingress-nginx and kps are multi-source, referencing their in-repo values by path via a `$values` source-ref (a second source tracking the `main` branch). Values files migrated to repo (2026-04-25). Working files deleted from k3s-cp-01.
-
 ## Implementation Roadmap
 
 Ordered by dependency chain; each step enables the next:
 
 1. ~~**Helmfile:** Declare cert-manager, ingress-nginx, kps as Helmfile releases. Clean up kps 29 revisions. Migrate kps PVCs from `longhorn-storage-heavy` → `longhorn` SC. MetalLB/Longhorn/kube-vip Helm migration deferred.~~
 2. ~~**SOPS + age:** Wire `.sops.yaml`, generate age key, encrypt Slack webhook and any other secrets. Must complete before Argo CD.~~
-3. ~~**Argo CD:** Install via Helmfile with SOPS+age integration; migrate all Helmfile releases.~~ Complete. Deployed non-HA (chart 9.5.9, app v3.3.8); cert-manager (2026-04-29), ingress-nginx (2026-07-25), and kps (2026-07-26) migrated. Helmfile now manages only `argocd`. Pattern: create an Application at the exact chart version, `ServerSideApply` sync, remove from helmfile.yaml, delete the Helm release secret. ingress-nginx and kps reference in-repo values by path (multi-source `$values`); cert-manager inlined its chart-default values as `valuesObject`. Argo CD is the reconciler for all steps below.
+3. ~~**Argo CD:** Install via Helmfile with SOPS+age integration; migrate all Helmfile releases.~~ Complete. Pattern: create an Application at the exact chart version, `ServerSideApply` sync, remove from helmfile.yaml, delete the Helm release secret.
 4. **Kyverno:** First workload deployed via Argo CD. Policies for resource limits + default NetworkPolicies.
 5. **Loki:** Centralized logging, deployed via Argo CD.
 6. **Ansible:** Codify node config (swap, kernel, k3s config, sudoers, SSH keys) as idempotent playbooks. Parallel track.

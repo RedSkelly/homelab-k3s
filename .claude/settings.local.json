@@ -11,5 +11,8 @@
       "Bash(kubectl get pods *)",
       "Bash(kubectl get *)"
     ]
+  },
+  "enabledPlugins": {
+    "mattpocock-skills@mattpocock": false
   }
 }
