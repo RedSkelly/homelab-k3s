@@ -9,7 +9,7 @@ Architecture docs, decision records, and operational runbooks. Supplements inlin
 | `tailscale-subnet-router.md` | CGNAT remote-access design record + runbook          | Present |
 | `benchmarks/`                | Performance baselines; re-run to catch regressions   | Present |
 | `architecture.md`            | Network topology, cluster layout, data-flow diagrams | Planned |
-| `adr/`                       | Architecture Decision Records (numbered, immutable)  | Planned |
+| `adr/`                       | Architecture Decision Records (numbered, immutable)  | Present |
 | `runbooks/`                  | Step-by-step operational procedures                  | Planned |
 | `disaster-recovery.md`       | Rebuild-from-scratch procedure using this repo       | Planned |
 
