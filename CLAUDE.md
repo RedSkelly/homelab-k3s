@@ -49,7 +49,7 @@ Version = the running app version; Helm chart version noted in the Install Metho
 
 | Component             | Version | Install Method      | Notes                                    |
 |-----------------------|---------|---------------------|------------------------------------------|
-| kube-vip              | v0.8.2  | static pod          | Floating VIP for API server HA           |
+| kube-vip              | v0.8.2  | k3s auto-deploy manifest (DaemonSet) | Floating VIP for API server HA; not in Git (ADR 0002) |
 | MetalLB               | v0.14.5 | kubectl manifest    | LoadBalancer IP allocation               |
 | Longhorn              | v1.6.2  | kubectl manifest    | Sole default StorageClass                |
 | cert-manager          | v1.19.2 | Argo CD                | First Helmfile→Argo CD migration (2026-04-29) |
@@ -86,7 +86,7 @@ Ordered by dependency chain; each step enables the next:
 1. ~~**Helmfile:** Declare cert-manager, ingress-nginx, kps as Helmfile releases. Clean up kps 29 revisions. Migrate kps PVCs from `longhorn-storage-heavy` → `longhorn` SC. MetalLB/Longhorn/kube-vip Helm migration deferred.~~
 2. ~~**SOPS + age:** Wire `.sops.yaml`, generate age key, encrypt Slack webhook and any other secrets. Must complete before Argo CD.~~
 3. ~~**Argo CD:** Install via Helmfile with SOPS+age integration; migrate all Helmfile releases.~~ Complete. Pattern: create an Application at the exact chart version, `ServerSideApply` sync, remove from helmfile.yaml, delete the Helm release secret.
-4. **Kyverno:** First workload deployed via Argo CD. Policies for resource limits + default NetworkPolicies.
+4. **Kyverno:** First workload deployed via Argo CD. Policies for resource limits + default NetworkPolicies. Preceded, in order, by backups (off-node etcd snapshots, Longhorn backup target, offline age key copy) and the ingress controller replacement in `docs/adr/0001-service-lb-and-ingress.md`.
 5. **Loki:** Centralized logging, deployed via Argo CD.
 6. **Ansible:** Codify node config (swap, kernel, k3s config, sudoers, SSH keys) as idempotent playbooks. Parallel track.
 7. **Terraform:** Proxmox VM lifecycle. After Ansible.
@@ -96,6 +96,9 @@ Deferred: CI pipeline, Harbor+Trivy, Vault+External Secrets, Hugo portfolio site
 ## Known Open Items
 
 - Longhorn backup target unconfigured.
+- etcd snapshots are local only: each server takes one every 6 hours and keeps 30 (`config.yaml`), there are no `etcd-s3` settings, and every `ETCDSnapshotFile` record points to a local file. Losing a server's disk loses its snapshots. One off-node target could serve both this and the Longhorn backup item.
+- No offline copy of the age private key is recorded. Known copies: `~/.config/sops/age/keys.txt` on each workstation and the `argocd/sops-age` Secret. If all are lost, every SOPS-encrypted file in Git is unreadable.
+- The k3s join token is in plain text in `ExecStart` of `k3s.service` on k3s-cp-02 and k3s-cp-03 (workers not checked). Ansible track: move it to `/etc/rancher/k3s/config.yaml`, then rotate it.
 - VLAN 20 carries no Longhorn traffic (`storage-network` unset); a dedicated 10GbE segment sits idle while storage contends with cluster/API/pod traffic on VLAN 10. Decide: point Longhorn at it (needs a Multus NetworkAttachmentDefinition) or retire the segment and stop describing it as storage replication. Expected gain is isolation, not speed: both VLANs benchmark identically (~9.5 Gbps), and the write bottleneck was CPU, not network.
 - SATA SSD write ceiling assumed ~500 MB/s but never measured on actual disks; replicas measured disk-bound (iowait ~27%) but headroom unquantified. Measure before acting on any disk-bound conclusion.
 - Each pve host now 7 vCPU (CP 4 + worker 3) on 6 physical cores; etcd CP shares an oversubscribed host with a storage worker (steal ~0.3-0.5%). Structural, not urgent. pve3 also runs the 1-vCPU Tailscale LXC (idle, negligible steal).
@@ -104,10 +107,11 @@ Deferred: CI pipeline, Harbor+Trivy, Vault+External Secrets, Hugo portfolio site
 - Zero NetworkPolicies.
 - Missing resource requests/limits on pods.
 - Set a longer duration (e.g. 8760h / 1 year) on the cert-manager CA cert to cut renewal churn (leaf certs are 90-day, auto-renewing ~30 days before expiry).
-- Longhorn/MetalLB/kube-vip not managed by Helm yet (future Helmfile migration).
+- Longhorn and MetalLB (and kube-vip, see ADR 0002) not yet migrated to Argo CD.
 - CoreDNS runs 2 replicas from a manual `kubectl scale` (field manager `kubectl`, `scale` subresource); Git declares no replica count, and the k3s addon manifest omits `replicas` (default 1). A rebuild that skips the scale step in `kubernetes/bootstrap/README.md` leaves `coredns-pdb` at 0 allowed disruptions. Durable fix: an Ansible post-install task, or disable the packaged addon (`disable: coredns`) and run the CoreDNS chart via Argo CD, keeping the kube-dns Service IP `10.43.0.10` and the `NodeHosts` entries.
 - Install helmfile-secrets to Windows as well, modify its plugin file to disable(?) deployment and work as CLI instead, like was done on Mac.
 - Ingress controller replacement: `docs/adr/0001-service-lb-and-ingress.md` (status Proposed).
+- kube-vip ownership: `docs/adr/0002-kube-vip-ownership.md` (status Proposed).
 - The ingress-nginx Argo CD Application is multi-source: it references the in-repo values file by path via a `$values` source-ref, which relies on Argo CD anonymously cloning the public GitHub repo (no repository secret is configured). If the repo is made private, this ref breaks: register the repo in Argo CD (a read-only deploy key/token repository secret) before flipping visibility. cert-manager is unaffected (its values are inlined as `valuesObject`). kps (migrated 2026-07-26) uses the same multi-source pattern and inherits this dependency; its SOPS overlay is consumed via helm-secrets wrapper mode, a plain `$values/…/secrets.values.yaml` path, not the `secrets://` scheme, which is incompatible with the `$values` ref (Argo will not expand `$values` behind a scheme prefix).
 - kps has two settings that must not be reverted without reading the reason first:
   - `prometheusOperator.admissionWebhooks.certManager.enabled: true` (set 2026-07-26). The chart's default kube-webhook-certgen Jobs are Helm `pre-install`/`pre-upgrade` hooks that wedge Argo CD syncs: the Job finishes in ~2s and is hook-deleted before Argo records success, parking the sync on "waiting for completion of hook" indefinitely. It survives a controller restart (the stuck state persists in `.status.operationState`); recovery requires forcing the op to `Terminating` via a status patch. With cert-manager issuing the webhook cert there are no hooks, so normal full syncs work. Switching it on is a two-phase transition: the operator pod CrashLoops on a missing cert until the self-signed→root→admission cert chain issues, so do a full sync rather than a selective one.

@@ -21,7 +21,7 @@ Argo CD is the reconciler for the Helm-managed components; the raw-manifest ones
 - `values.yaml`: Helm values for the chart (hand-authored, intent-based)
 - Argo CD `Application` manifest: where to find the chart and which values to use
 - `network-policy.yaml`: NetworkPolicy for the component, co-located with the workload it protects
-- Raw manifests where applicable (kube-vip static pod, MetalLB config)
+- Raw manifests where applicable (kube-vip DaemonSet, MetalLB config)
 
 Helmfile is the bootstrap/break-glass tool. `helmfile.yaml` at the repo root references the same values files. Used to:
 
@@ -39,7 +39,7 @@ The layers deploy in sequence, each depending on the one above:
 5. **apps/**: Hugo portfolio site
 6. **ci/**: CI pipeline
 
-> **Current migration state:** Argo CD manages cert-manager (2026-04-29), ingress-nginx (2026-07-25), and kube-prometheus-stack (2026-07-26). Helmfile manages only `argocd`. MetalLB, Longhorn, and kube-vip are still kubectl/static-pod. The layout above is the GitOps target, migrated to incrementally.
+> **Current migration state:** Argo CD manages cert-manager (2026-04-29), ingress-nginx (2026-07-25), and kube-prometheus-stack (2026-07-26). Helmfile manages only `argocd`. MetalLB and Longhorn are still kubectl manifests; kube-vip is a k3s auto-deploy manifest on a server node (`docs/adr/0002-kube-vip-ownership.md`). The layout above is the GitOps target, migrated to incrementally.
 
 ## Secrets
 

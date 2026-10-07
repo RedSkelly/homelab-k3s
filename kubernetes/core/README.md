@@ -4,7 +4,7 @@ Foundational cluster infrastructure that all other workloads depend on. These de
 
 ## Deployment order
 
-1. **kube-vip:** Control plane VIP (static pod, not managed by Argo CD)
+1. **kube-vip:** Control plane VIP (DaemonSet; not managed by Argo CD yet, see `docs/adr/0002-kube-vip-ownership.md`)
 2. **MetalLB:** LoadBalancer IP allocation for services
 3. **Longhorn:** Distributed storage (sole default StorageClass)
 4. **cert-manager:** TLS certificate automation
@@ -16,5 +16,5 @@ Foundational cluster infrastructure that all other workloads depend on. These de
 - `values.yaml`: Helm chart values (hand-authored, intent-based)
 - `application.yaml`: Argo CD Application CRD
 - `network-policy.yaml`: NetworkPolicy for the component's namespace
-- Raw manifests where applicable (kube-vip static pod, MetalLB config)
+- Raw manifests where applicable (kube-vip DaemonSet, MetalLB config)
 - `secrets.sops.yaml`: SOPS-encrypted secrets (if needed)
